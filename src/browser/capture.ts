@@ -1,7 +1,7 @@
 import type { ConsoleMessage, Page, Request, Response } from "playwright-core";
 import type { EvidenceSource, JsonValue } from "../contracts.js";
+import { extractAllowlistedLoggerFields } from "../logger/browser-payload.js";
 
-const LOGGER_FIELDS = ["event", "tagName", "domainName", "page_url", "dep"] as const;
 const SENSITIVE_KEYS = /^(?:authorization|cookie|set-cookie|password|passwd|secret|token|access_token|api_key|apikey|key|jwt|session|sessionid)$/i;
 const LOGGER_RESOURCE_TYPES = new Set(["xhr", "fetch", "ping"]);
 const RESPONSE_BODY_TYPES = ["application/json", "text/plain"];
@@ -99,27 +99,6 @@ function selectedHeaders(headers: Record<string, string>): { [key: string]: Json
     if (value !== undefined) selected[name] = redactText(value);
   }
   return selected;
-}
-
-function loggerFields(body: string | null, contentType: string): { parseState: string; fields: { [key: string]: JsonValue } } {
-  if (body === null || body === "") return { parseState: "empty", fields: {} };
-  try {
-    let parsed: unknown;
-    if (contentType.includes("application/json")) {
-      parsed = JSON.parse(body);
-    } else {
-      parsed = Object.fromEntries(new URLSearchParams(body));
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { parseState: "malformed", fields: {} };
-    const record = parsed as Record<string, unknown>;
-    // shortcut: task 22 adds versioned field validation; persistence is allowlisted here now.
-    const fields = Object.fromEntries(
-      LOGGER_FIELDS.filter((field) => record[field] !== undefined).map((field) => [field, redactValue(record[field], field)]),
-    );
-    return { parseState: "allowlisted", fields };
-  } catch {
-    return { parseState: "malformed", fields: {} };
-  }
 }
 
 function requestFrameUrl(request: Request): string | null {
@@ -275,7 +254,7 @@ export class BrowserCapture {
 
     if (isLoggerRequest(request)) {
       const contentType = request.headers()["content-type"] ?? "";
-      const body = loggerFields(request.postData(), contentType);
+      const body = extractAllowlistedLoggerFields(request.postData(), contentType);
       this.#push("browser_logger", {
         kind: "logger_request",
         networkEvidenceId: evidence.evidenceId,
@@ -283,7 +262,7 @@ export class BrowserCapture {
         requestStartPageUrl: sanitizeUrl(page.url()),
         resourceType: request.resourceType(),
         parseState: body.parseState,
-        fields: body.fields,
+        fields: redactValue(body.fields),
       });
     }
   }

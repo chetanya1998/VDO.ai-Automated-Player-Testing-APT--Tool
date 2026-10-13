@@ -1,6 +1,6 @@
 # Player validator execution order
 
-29 focused tasks cover all 23 required cases plus the original RCA product scope. Tasks 01 through 05 are complete; task 22 is next and the remaining tasks are unstarted. Stable IDs are deliberately ordered by dependencies below; do not run them numerically.
+29 focused tasks cover all 23 required cases plus the original RCA product scope. Tasks 01 through 06 and task 22 are complete; task 23 is next and the remaining tasks are unstarted. Stable IDs are deliberately ordered by dependencies below; do not run them numerically.
 
 | Order | Task | Dependencies |
 |---|---|---|

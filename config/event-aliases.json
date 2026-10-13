@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "profileId": "fixture-video-inline-v1",
+  "status": "synthetic_draft",
+  "aliases": {
+    "loaded": "loaded",
+    "initVdo": "init_vdo",
+    "Forceplay": "forceplay",
+    "Auto_Plays": "auto_plays",
+    "Pageview": "pageview",
+    "Website Pageview": "website_pageview",
+    "Began ATF": "began_atf",
+    "Began BTF": "began_btf",
+    "Came In View": "came_in_view",
+    "Ad Request": "ad_request",
+    "Ad Match": "ad_match",
+    "Video Loaded": "video_loaded",
+    "Video Start": "video_start",
+    "Website Pageview Match": "website_pageview_match",
+    "Pageview Match": "pageview_match",
+    "Viewable Impression": "viewable_impression",
+    "Replay": "replay",
+    "Blocked Player": "blocked_player",
+    "BlockedInline": "blocked_inline",
+    "BlockedAutoPlay": "blocked_autoplay",
+    "Blocked IMA": "blocked_ima",
+    "Blocked Agent": "blocked_agent",
+    "Blocked Device": "blocked_device",
+    "Blocked URL": "blocked_url",
+    "Error": "error"
+  }
+}
