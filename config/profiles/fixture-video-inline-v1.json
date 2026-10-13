@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "profileId": "fixture-video-inline-v1",
+  "profileStatus": "fixture_only",
+  "description": "Synthetic inline video profile for deterministic validator development. It makes no production VDO.AI claim.",
+  "site": {
+    "approvedUrls": [
+      "https://publisher.example/articles/one"
+    ],
+    "expectedOrigin": "https://publisher.example",
+    "expectedDomainName": "publisher.example",
+    "urlComparison": {
+      "mode": "exact_at_request_start",
+      "status": "draft"
+    }
+  },
+  "player": {
+    "version": {
+      "value": null,
+      "state": "unknown",
+      "owner": "Player Engineering"
+    },
+    "product": "video",
+    "placement": "inline_body_content",
+    "features": {
+      "anchor": {
+        "state": "enabled",
+        "expectedId": "v-example-site",
+        "expectedCount": 1
+      },
+      "floating": {
+        "state": "disabled"
+      },
+      "mutedAutoplay": {
+        "state": "enabled"
+      },
+      "consent": {
+        "state": "enabled",
+        "fixtureValue": "granted",
+        "productionSource": {
+          "state": "unknown",
+          "owner": "Product and Ad Ops"
+        }
+      },
+      "realIos": {
+        "state": "unknown",
+        "owner": "QA"
+      },
+      "tabletAndCtv": {
+        "state": "disabled"
+      }
+    }
+  },
+  "tag": {
+    "mappingSource": "explicit_profile",
+    "expected": [
+      "v-example-site"
+    ],
+    "loaderUrl": "https://a.vdo.ai/core/v-example-site/vdo.ai.js",
+    "expectedRequestCount": 1,
+    "expectedExternalScriptCount": 1,
+    "allowedAdditionalTagSuffixes": [
+      "-v1",
+      "-v2"
+    ]
+  },
+  "devices": [
+    {
+      "id": "desktop-chromium",
+      "state": "enabled",
+      "browser": "chromium",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "emulated": false
+    },
+    {
+      "id": "mobile-chromium-emulated",
+      "state": "enabled",
+      "browser": "chromium",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "emulated": true
+    }
+  ],
+  "logger": {
+    "requestUrlContains": [
+      "logger",
+      "logger.php"
+    ],
+    "requestTypes": [
+      "xhr",
+      "ping"
+    ],
+    "requiredBodyFields": [
+      "event",
+      "tagName",
+      "domainName",
+      "page_url",
+      "dep"
+    ],
+    "allowedBodyFields": [
+      "event",
+      "tagName",
+      "domainName",
+      "page_url",
+      "dep"
+    ],
+    "expectedHttpStatus": 200,
+    "localScope": [
+      "runId",
+      "physicalLoadId",
+      "articleEpoch",
+      "tagName"
+    ],
+    "backendCorrelation": {
+      "state": "unknown",
+      "requiredSharedKey": null,
+      "owner": "Backend and Player Engineering"
+    }
+  },
+  "events": {
+    "aliasStatus": "synthetic_draft",
+    "servedPath": [
+      "loaded",
+      "initVdo",
+      "Forceplay",
+      "Auto_Plays",
+      "Pageview",
+      "Website Pageview",
+      "Began ATF",
+      "Came In View",
+      "Ad Request",
+      "Ad Match",
+      "Video Loaded",
+      "Video Start",
+      "Website Pageview Match",
+      "Pageview Match",
+      "Viewable Impression"
+    ],
+    "noAdPath": [
+      "loaded",
+      "initVdo",
+      "Forceplay",
+      "Auto_Plays",
+      "Pageview",
+      "Website Pageview",
+      "Began ATF",
+      "Came In View",
+      "Ad Request",
+      "Video Start"
+    ],
+    "optional": [
+      "Replay"
+    ],
+    "productionAliases": {
+      "state": "unknown",
+      "owner": "Player Engineering"
+    }
+  },
+  "dependencies": {
+    "state": "enabled",
+    "fixtureRequired": [
+      "vdo.ai.js",
+      "analytics.js",
+      "allowed_url",
+      "min.js",
+      "ima3.js",
+      "vdo.player.js",
+      "prebid.js",
+      "rtb.js"
+    ],
+    "productionRequirements": {
+      "state": "unknown",
+      "owner": "Player Engineering"
+    }
+  },
+  "demand": {
+    "state": "enabled",
+    "mode": "synthetic_only",
+    "providers": {
+      "gam": "enabled",
+      "prebid": "enabled",
+      "reseller": "enabled"
+    },
+    "eligibility": {
+      "consent": "granted",
+      "initialized": true,
+      "autoplay": "muted",
+      "inView": true
+    },
+    "externalRequestsAllowed": false,
+    "noFillCategory": "INVESTIGATE Demand"
+  },
+  "expectedBlocks": {
+    "state": "disabled",
+    "events": []
+  },
+  "timingMs": {
+    "scriptPassMax": 500,
+    "scriptWarningMax": 1000,
+    "loggerWarningAbove": 500,
+    "loggerFailureAbove": {
+      "state": "unknown",
+      "owner": "QA and Engineering"
+    },
+    "eventGapThreshold": {
+      "state": "unknown",
+      "owner": "QA and Engineering"
+    }
+  },
+  "viewability": {
+    "video": {
+      "minimumVisiblePercent": 50,
+      "minimumContinuousMs": 2000
+    }
+  },
+  "scenarios": [
+    {
+      "id": "healthy-inline-video",
+      "expectedOutcome": "PASS"
+    },
+    {
+      "id": "duplicate-implementation",
+      "expectedOutcome": "ISSUE - Duplicate implementation"
+    },
+    {
+      "id": "blocked-ima-runtime",
+      "expectedOutcome": "ISSUE - Runtime/Browser"
+    }
+  ]
+}

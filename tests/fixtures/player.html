@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{SCENARIO_TITLE}}</title>
+  </head>
+  <body data-synthetic-fixture="true" data-scenario="{{SCENARIO_ID}}">
+    <header><h1>VDO.AI synthetic player fixture</h1></header>
+    <main id="publisher-content">
+      <p>This page is deterministic test data and does not contact external ad demand.</p>
+      {{ANCHORS}}
+      {{ARTICLE_CONTROLS}}
+    </main>
+    <output id="fixture-status" data-expected-failure="{{EXPECTED_FAILURE}}">pending</output>
+    <script id="fixture-scenario" type="application/json">{{SCENARIO_JSON}}</script>
+    {{LOADER_SCRIPTS}}
+  </body>
+</html>
