@@ -1,0 +1,249 @@
+[
+  {
+    "case_id": "TC-1",
+    "title": "Correct tag and vdo.ai.js loading",
+    "tasks": [
+      "07",
+      "23"
+    ],
+    "acceptance": "Capture the expected a.vdo.ai/core/<TAGNAME>/vdo.ai.js request; verify the approved tag, script type and HTTP 200. Test missing/wrong tag, 4xx/5xx, cancellation and blocking. Compare payload, script and DOM identities.",
+    "decisions": "Expected tag mapping is authoritative; deriving it from a hostname alone remains unconfirmed.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-2",
+    "title": "Load time of vdo.ai.js",
+    "tasks": [
+      "24"
+    ],
+    "acceptance": "Measure total request duration in a cold-cache run. Test 499, 500, 501, 1000 and 1001 ms plus timeout. Proposed bands: PASS <=500 ms, WARNING >500 to <=1000 ms, FAIL >1000 ms or timeout.",
+    "decisions": "Record cache/network conditions. Confirm thresholds before production enforcement.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-3",
+    "title": "Tag loads only once",
+    "tasks": [
+      "07",
+      "26"
+    ],
+    "acceptance": "Count requests and matching implementation elements per tag and page/article epoch. Two different tags are valid; duplicate same-tag injection fails. Capture initiators and DOM mutations. Test duplicate script, duplicate anchor, legitimate distinct tags and a floating unit.",
+    "decisions": "Floating units need no anchor. Define bootstrap versus injected external script counts and SPA reinsertion policy.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-4",
+    "title": "Logger requests are firing",
+    "tasks": [
+      "05",
+      "22",
+      "08"
+    ],
+    "acceptance": "Capture logger/logger.php requests including xhr and ping, payload, status, initiator and duration. Test present HTTP 200, non-200, no requests and incomplete capture. Attribute absence only after script execution and the observation window.",
+    "decisions": "Browser collection is sufficient; backend API access is not a prerequisite.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-5",
+    "title": "Logger event sequence",
+    "tasks": [
+      "11"
+    ],
+    "acceptance": "Recognize ad-served Flow A and explainable no-ad Flow B. Test missing critical events and interrupted prerequisites while allowing independent ordering and subsequent ad cycles. Preserve raw names and start-time sequence.",
+    "decisions": "Confirm exact aliases and critical conditions. Example Flow A places viewability before playback, conflicting with TC-6/TC-10.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-6",
+    "title": "Individual event checks",
+    "tasks": [
+      "11",
+      "25",
+      "29"
+    ],
+    "acceptance": "Cover Loaded, initVdo, conditional Forceplay/Auto_Plays, Pageview, Website Pageview, ATF/BTF, Came In View, eligible Ad Request, Ad Match, Video Loaded/Start, both Pageview Match events, Viewable Impression and conditional Replay. Test each required missing event in its eligible scenario.",
+    "decisions": "Video Start in no-ad content flow must not require an ad Video Loaded. Criticality is profile-dependent.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-7",
+    "title": "Pageview counts",
+    "tasks": [
+      "11",
+      "26"
+    ],
+    "acceptance": "Test one and multiple active tags: exactly one tag Pageview each and Website Pageview in {0,1} across tags. Detect excess and missing counts; distinguish expected blocks from unexplained formation failures.",
+    "decisions": "Confirm Website Pageview scope across virtual articles. Do not confuse a count of zero with missing capture.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-8",
+    "title": "ATF BTF and Came In View",
+    "tasks": [
+      "25"
+    ],
+    "acceptance": "Exercise initial ATF, BTF followed by scroll, and early scroll before loading completes. Exactly one ATF/BTF state per eligible tag; Came In View must occur when exposure is observed.",
+    "decisions": "Use viewport state at the relevant event, not only original document placement.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-9",
+    "title": "Ad request",
+    "tasks": [
+      "11",
+      "12",
+      "29"
+    ],
+    "acceptance": "For an eligible initialized and visible player, test Auto_Plays/Came In View leading to Ad Request or a confirmed equivalent. Inject missing/blocked demand requests and failed prerequisites; cite allowed_url and autoplay evidence.",
+    "decisions": "Disabled demand or expected policy blocking changes applicability, not publisher correctness.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-10",
+    "title": "Ad serving chain and viewable impression",
+    "tasks": [
+      "12",
+      "25",
+      "14"
+    ],
+    "acceptance": "Identify the first supported gap in Ad Request -> Ad Match -> Video Loaded -> Video Start -> Viewable Impression. Measure >=50% visibility continuously for >=2 seconds for video or >=1 second for banner. Test interrupted exposure and exact boundaries.",
+    "decisions": "Optional Active View bs/mtos/p are supporting evidence only. No Ad Match alone is INVESTIGATE Demand, not an implementation failure.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-11",
+    "title": "Blocked events and errors",
+    "tasks": [
+      "29"
+    ],
+    "acceptance": "Classify Blocked Player, BlockedInline, BlockedAutoPlay, Blocked IMA, Blocked Agent, Blocked Device, Error including Q2/Bn, and Blocked URL. Verify expected configuration and record browser/device plus preceding evidence.",
+    "decisions": "Test expected versus unexpected blocks. Five Forceplay attempts require observable attempt evidence; do not infer them from one event.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-12",
+    "title": "Dependency loading",
+    "tasks": [
+      "29",
+      "05"
+    ],
+    "acceptance": "Check required vdo.ai.js, analytics.js, allowed_url, min.js, ima3.js, vdo.player.js, prebid.js and rtb.js against the product profile. Cover HTTP 200, missing, blocked and failed files before attributing missing initVdo to placement.",
+    "decisions": "Not every product requires every file. Record transport/configuration cause separately from suggested owner.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-13",
+    "title": "DOM check",
+    "tasks": [
+      "07",
+      "26"
+    ],
+    "acceptance": "Verify correct unique anchor and external script, intended non-floating body/content placement, and unexpected removal/recreation. Test missing anchor/Q2, duplicates, wrong ID, wrong placement and valid floating without anchor.",
+    "decisions": "Collect DOM evidence throughout the run, but present this stage after logger checks as requested.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-14",
+    "title": "Player formation and CSS layout",
+    "tasks": [
+      "25"
+    ],
+    "acceptance": "Test formed versus unformed player, zero dimensions, display/visibility hiding, ancestor overflow clipping, z-index occlusion, transforms, parent layout and fixed/sticky/floating behavior. Distinguish formation failure from publisher CSS obstruction.",
+    "decisions": "Unobservable cross-frame geometry stays UNKNOWN rather than fabricated viewability.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-15",
+    "title": "Timing of logger events",
+    "tasks": [
+      "24"
+    ],
+    "acceptance": "Record every logger request duration and consecutive-event gaps separately. Test <=500 ms, >500 ms, isolated and repeated spikes, timeout and unavailable timing. Provisional >500 ms warnings must preserve raw measurements.",
+    "decisions": "Repeated/large-delay FAIL limits and event-gap thresholds are unspecified. Exactly 500 ms is not above the proposed threshold.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-16",
+    "title": "Device coverage",
+    "tasks": [
+      "27"
+    ],
+    "acceptance": "Execute applicable cases on desktop and a named mobile profile, including inline/autoplay/device blocks, playback after tap, placement, dimensions and viewability. Use real iOS/Safari evidence for claims about iOS restrictions.",
+    "decisions": "Emulation cannot prove real-device behavior. Tablets and CTV remain later phase; missing required real-device evidence is reported unverified.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-17",
+    "title": "Payload consistency",
+    "tasks": [
+      "22",
+      "23",
+      "26"
+    ],
+    "acceptance": "Compare tagName to the script/anchor per tag; domainName to the approved site; page_url to the event-time article; dep within page load. Test wrong/mixed tags, wrong domain, stale article and inconsistent build.",
+    "decisions": "Multiple different tags are legitimate. Missing fields are TC-20 warnings; do not manufacture mismatches from absent values.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-18",
+    "title": "Tag to domain match",
+    "tasks": [
+      "23"
+    ],
+    "acceptance": "Validate approved product prefix v/c/s/b, configured root-domain mapping and legitimate -v1/-v2 suffixes. Test subdomains, .co.in, valid multiple tags, wrong domain and wrong product.",
+    "decisions": "Examples alone do not establish a universal derivation algorithm. Unconfirmed mapping is UNKNOWN.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-19",
+    "title": "Dependency build check",
+    "tasks": [
+      "22"
+    ],
+    "acceptance": "Detect dep changes within one physical page load as FAIL. Test consistent build, changed build, empty field and dependencies_dev_3153 on a production profile.",
+    "decisions": "The meaning of dev is unconfirmed: report an observation until configured policy establishes a development-build WARNING.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-20",
+    "title": "Event name and field sanity",
+    "tasks": [
+      "22"
+    ],
+    "acceptance": "Validate nonempty event, tagName, domainName, page_url and dep; warn on unknown event names or missing/invalid fields. Keep raw event strings and explicit versioned aliases. Test malformed JSON and ignore unrelated payload fields.",
+    "decisions": "Engineering must supply exact vocabulary; unknown future events must not crash parsing or silently disappear.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-21",
+    "title": "Current article URL equals logger page_url",
+    "tasks": [
+      "26"
+    ],
+    "acceptance": "Snapshot current URL at request start; compare each event with its article epoch. Test matching URL, stale previous article, redirect and query/hash/trailing-slash variants. Delayed responses from the previous article retain their original event-time scope.",
+    "decisions": "Strict comparison is the draft baseline; permitted URL normalization needs confirmation.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-22",
+    "title": "loaded and pageview once per article URL",
+    "tasks": [
+      "26",
+      "11"
+    ],
+    "acceptance": "Per run/article/tag count loaded=1 and pageview=1. Test duplicate loaded, duplicate pageview with one loaded, pageviews across articles with one loaded, and loaded without pageview. Preserve block/error reasons and multi-tag isolation.",
+    "decisions": "Apply the document's draft per-article contract; confirm reinitialization versus physical script reload and revisit behavior.",
+    "status": "Planned; not implemented or executed"
+  },
+  {
+    "case_id": "TC-23",
+    "title": "Infinite scroll and SPA scenario",
+    "tasks": [
+      "26",
+      "27"
+    ],
+    "acceptance": "Keep capture active through at least three distinct articles via scroll or same-document navigation. For every tag/article assert current page_url plus one loaded and pageview; test stale URL, missing reload event and duplicate events.",
+    "decisions": "Requires a site-specific safe transition action and approved SPA lifecycle contract. Failure to reach three articles means incomplete coverage.",
+    "status": "Planned; not implemented or executed"
+  }
+]
