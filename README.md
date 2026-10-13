@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–06 and Tasks 22–23 are implemented:
+Tasks 01–07 and Tasks 22–23 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -15,9 +15,10 @@ Tasks 01–06 and Tasks 22–23 are implemented:
 - five-field logger parsing with versioned aliases, field diagnostics, and physical-load dependency consistency;
 - deterministic profile snapshots and normalized evidence with retained duplicates, raw artifact references, timing, article scope, and separate player instances;
 - explicit site/domain/tag/product mappings with supported suffix variants, multiple-tag identities, and unverified candidate suggestions;
+- evidence-backed loader, per-tag duplicate, anchor, external/bootstrap script, DOM placement, floating, and lifecycle checks;
 - a loopback-only URL policy that keeps unrestricted remote execution disabled.
 
-Tag-count, DOM-placement, and product verdict rules remain to be implemented. This repository does not yet claim validation of a live publisher or real ad demand.
+Timing, logger lifecycle, demand, viewability, and remaining product verdict rules are still pending. This repository does not yet claim validation of a live publisher or real ad demand.
 
 ## Requirements
 
@@ -56,6 +57,7 @@ src/evidence/           Deterministic capture normalization
 src/logger/             Five-field browser logger payload parsing
 src/profile.ts          Deterministic profile snapshots
 src/profile/            Approved site/tag/product identity resolution
+src/rules/              Deterministic evidence-backed validator rules
 src/contracts.ts        Runtime-validated shared contracts
 src/cli.ts              Profile validation CLI
 tests/fixtures/         Synthetic publisher pages and mock endpoints
@@ -72,5 +74,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 07: validate tags, duplicates, and DOM placement.
+The next implementation task is Task 24: measure script and logger timing.
 

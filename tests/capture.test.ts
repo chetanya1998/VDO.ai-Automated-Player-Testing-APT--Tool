@@ -18,7 +18,13 @@ function fakePage(url = "http://127.0.0.1/scenario"): {
     url: () => url,
     title: async () => "Fixture player",
     frames: () => [{ name: () => "main", url: () => url }],
-    evaluate: async () => [{ tag: "video", id: "v-player", playerState: "ready", width: 640, height: 360, visible: true }],
+    evaluate: async () => ({
+      anchors: [{ id: "v-player", tag: "video", parentLandmark: "main", placement: "body_content" }],
+      externalScripts: [],
+      bootstrapScripts: [],
+      mutations: [],
+      players: [{ tag: "video", id: "v-player", playerState: "ready", width: 640, height: 360, visible: true }],
+    }),
     screenshot: async () => Buffer.from("fixture-screenshot"),
   } as unknown as Page;
   return {

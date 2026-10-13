@@ -1,6 +1,7 @@
 import type { ConsoleMessage, Page, Request, Response } from "playwright-core";
 import type { EvidenceSource, JsonValue } from "../contracts.js";
 import { extractAllowlistedLoggerFields } from "../logger/browser-payload.js";
+import { captureDomSnapshot } from "./dom.js";
 
 const SENSITIVE_KEYS = /^(?:authorization|cookie|set-cookie|password|passwd|secret|token|access_token|api_key|apikey|key|jwt|session|sessionid)$/i;
 const LOGGER_RESOURCE_TYPES = new Set(["xhr", "fetch", "ping"]);
@@ -158,21 +159,9 @@ export class BrowserCapture {
     if (this.#pageCaptured || this.#closed) return;
     this.#pageCaptured = true;
     try {
-      const [title, players] = await Promise.all([
+      const [title, dom] = await Promise.all([
         page.title(),
-        page.evaluate(() => Array.from(document.querySelectorAll("[data-synthetic-player], [id^='v-'], iframe")).slice(0, 50).map((element) => {
-          const html = element as HTMLElement;
-          const bounds = html.getBoundingClientRect();
-          const style = getComputedStyle(html);
-          return {
-            tag: html.tagName.toLowerCase(),
-            id: html.id,
-            playerState: html.dataset.syntheticPlayer ?? null,
-            width: Math.round(bounds.width),
-            height: Math.round(bounds.height),
-            visible: style.display !== "none" && style.visibility !== "hidden" && bounds.width > 0 && bounds.height > 0,
-          };
-        })),
+        captureDomSnapshot(page),
       ]);
       const frames = page.frames().slice(0, 50).map((frame) => ({ name: redactText(frame.name()), url: sanitizeUrl(frame.url()) }));
       this.#push("browser_dom", {
@@ -180,7 +169,11 @@ export class BrowserCapture {
         pageUrl: sanitizeUrl(page.url()),
         title: redactText(title),
         frames: redactValue(frames),
-        players: redactValue(players),
+        anchors: redactValue(dom.anchors),
+        externalScripts: redactValue(dom.externalScripts),
+        bootstrapScripts: redactValue(dom.bootstrapScripts),
+        mutations: redactValue(dom.mutations),
+        players: redactValue(dom.players),
       });
     } catch (error) {
       this.#gap("page_capture_unavailable", `DOM snapshot unavailable: ${redactText(error instanceof Error ? error.message : String(error))}`, null);

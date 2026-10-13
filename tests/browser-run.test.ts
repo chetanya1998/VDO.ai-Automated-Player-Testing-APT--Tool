@@ -102,7 +102,9 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
           }, milliseconds));
         },
         async evaluate(pageFunction: unknown) {
-          if (String(pageFunction).includes("querySelectorAll")) return [];
+          if (String(pageFunction).includes("querySelectorAll")) return {
+            anchors: [], externalScripts: [], bootstrapScripts: [], mutations: [], players: [],
+          };
           const scenarioId = decodeURIComponent(new URL(currentUrl).pathname.split("/").at(-1) ?? "unknown");
           return {
             initial: { cookie: "", localStorageKeys: [] },

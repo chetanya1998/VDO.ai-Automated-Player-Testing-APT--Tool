@@ -60,6 +60,8 @@
     "loaderUrl": "https://a.vdo.ai/core/v-example-site/vdo.ai.js",
     "expectedRequestCount": 1,
     "expectedExternalScriptCount": 1,
+    "expectedBootstrapScriptCount": 0,
+    "expectedScriptType": "classic",
     "allowedAdditionalTagSuffixes": [
       "-v1",
       "-v2"

@@ -1,5 +1,6 @@
 import { chromium, errors, type Browser, type LaunchOptions, type Page } from "playwright-core";
 import { BrowserCapture, type BrowserCaptureResult, type CaptureLimits } from "./capture.js";
+import { DOM_TRACKER_INIT_SCRIPT } from "./dom.js";
 import {
   PRODUCTION_EGRESS_BOUNDARY,
   UrlPolicyError,
@@ -160,6 +161,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
       browserVersion = browser.version();
       context = await browser.newContext({ viewport: options.viewport });
       await context.addInitScript(`globalThis.__vdoInitialStorage={cookie:document.cookie,localStorageKeys:Object.keys(localStorage).sort()}`);
+      await context.addInitScript(DOM_TRACKER_INIT_SCRIPT);
       await context.route("**/*", async (route) => {
         try {
           assertApprovedUrl(route.request().url(), policy);
