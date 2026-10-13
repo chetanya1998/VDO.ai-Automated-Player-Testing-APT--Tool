@@ -4,6 +4,7 @@
   "profileStatus": "fixture_only",
   "description": "Synthetic inline video profile for deterministic validator development. It makes no production VDO.AI claim.",
   "site": {
+    "identityMappingId": "publisher-example-video",
     "approvedUrls": [
       "https://publisher.example/articles/one"
     ],

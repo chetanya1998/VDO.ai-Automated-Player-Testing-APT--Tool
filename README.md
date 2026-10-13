@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–06 and Task 22 are implemented:
+Tasks 01–06 and Tasks 22–23 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -14,9 +14,10 @@ Tasks 01–06 and Task 22 are implemented:
 - credential and query-value redaction, approved response-body limits, distinct evidence IDs, and explicit collection gaps;
 - five-field logger parsing with versioned aliases, field diagnostics, and physical-load dependency consistency;
 - deterministic profile snapshots and normalized evidence with retained duplicates, raw artifact references, timing, article scope, and separate player instances;
+- explicit site/domain/tag/product mappings with supported suffix variants, multiple-tag identities, and unverified candidate suggestions;
 - a loopback-only URL policy that keeps unrestricted remote execution disabled.
 
-Expected tag/domain resolution and product verdict rules remain to be implemented. This repository does not yet claim validation of a live publisher or real ad demand.
+Tag-count, DOM-placement, and product verdict rules remain to be implemented. This repository does not yet claim validation of a live publisher or real ad demand.
 
 ## Requirements
 
@@ -48,12 +49,13 @@ pnpm test
 ## Repository structure
 
 ```text
-config/                 Fixture-only profile and versioned event aliases
+config/                 Fixture-only profiles, event aliases, and site identity mappings
 docs/                   Integration contract and implementation plan
 src/browser/            Bounded browser runner, evidence capture, and URL policy
 src/evidence/           Deterministic capture normalization
 src/logger/             Five-field browser logger payload parsing
 src/profile.ts          Deterministic profile snapshots
+src/profile/            Approved site/tag/product identity resolution
 src/contracts.ts        Runtime-validated shared contracts
 src/cli.ts              Profile validation CLI
 tests/fixtures/         Synthetic publisher pages and mock endpoints
@@ -70,5 +72,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 23: resolve expected tags and domain profiles.
+The next implementation task is Task 07: validate tags, duplicates, and DOM placement.
 

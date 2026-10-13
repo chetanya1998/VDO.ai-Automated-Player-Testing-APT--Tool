@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "status": "synthetic_draft",
+  "productPrefixes": {
+    "v": "video",
+    "c": "carousel",
+    "s": "story",
+    "b": "banner"
+  },
+  "sites": [
+    {
+      "mappingId": "publisher-example-video",
+      "approvedHosts": ["publisher.example"],
+      "rootDomain": "publisher.example",
+      "acceptedDomainNames": ["publisher.example"],
+      "allowMultipleTags": true,
+      "tags": [
+        {
+          "baseTag": "v-example-site",
+          "allowedTagNames": ["v-example-site", "v-example-site-v1", "v-example-site-v2"],
+          "product": "video",
+          "placement": "inline_body_content",
+          "floatingMode": "inline",
+          "ruleSupport": "supported"
+        }
+      ]
+    },
+    {
+      "mappingId": "dsij-approved-products",
+      "approvedHosts": ["insights.dsij.in"],
+      "rootDomain": "dsij.in",
+      "acceptedDomainNames": ["insights.dsij.in", "dsij.in"],
+      "allowMultipleTags": true,
+      "tags": [
+        {
+          "baseTag": "v-dsij-in",
+          "allowedTagNames": ["v-dsij-in", "v-dsij-in-v1", "v-dsij-in-v2"],
+          "product": "video",
+          "placement": "inline_body_content",
+          "floatingMode": "inline",
+          "ruleSupport": "supported"
+        },
+        {
+          "baseTag": "c-dsij-in",
+          "allowedTagNames": ["c-dsij-in", "c-dsij-in-v1", "c-dsij-in-v2"],
+          "product": "carousel",
+          "placement": "unconfirmed",
+          "floatingMode": "unconfirmed",
+          "ruleSupport": "unsupported"
+        },
+        {
+          "baseTag": "s-dsij-in",
+          "allowedTagNames": ["s-dsij-in", "s-dsij-in-v1", "s-dsij-in-v2"],
+          "product": "story",
+          "placement": "unconfirmed",
+          "floatingMode": "unconfirmed",
+          "ruleSupport": "unsupported"
+        },
+        {
+          "baseTag": "b-dsij-in",
+          "allowedTagNames": ["b-dsij-in", "b-dsij-in-v1", "b-dsij-in-v2"],
+          "product": "banner",
+          "placement": "unconfirmed",
+          "floatingMode": "unconfirmed",
+          "ruleSupport": "unsupported"
+        }
+      ]
+    },
+    {
+      "mappingId": "example-co-in-video",
+      "approvedHosts": ["markets.example.co.in"],
+      "rootDomain": "example.co.in",
+      "acceptedDomainNames": ["markets.example.co.in", "example.co.in"],
+      "allowMultipleTags": true,
+      "tags": [
+        {
+          "baseTag": "v-example-co-in",
+          "allowedTagNames": ["v-example-co-in", "v-example-co-in-v1", "v-example-co-in-v2"],
+          "product": "video",
+          "placement": "inline_body_content",
+          "floatingMode": "inline",
+          "ruleSupport": "supported"
+        }
+      ]
+    }
+  ]
+}
