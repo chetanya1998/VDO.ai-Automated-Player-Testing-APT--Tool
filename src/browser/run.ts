@@ -1,4 +1,5 @@
 import { chromium, errors, type Browser, type LaunchOptions, type Page } from "playwright-core";
+import { BrowserCapture, type BrowserCaptureResult, type CaptureLimits } from "./capture.js";
 import {
   PRODUCTION_EGRESS_BOUNDARY,
   UrlPolicyError,
@@ -15,6 +16,7 @@ export interface BrowserRunOptions {
   navigationTimeoutMs: number;
   totalTimeoutMs: number;
   observeAfterLoadMs?: number;
+  captureLimits?: Partial<CaptureLimits>;
 }
 
 export interface BrowserObservation {
@@ -54,6 +56,7 @@ export interface BrowserRunResult {
   initialStorage: StorageSnapshot | null;
   finalStorage: StorageSnapshot | null;
   observations: BrowserObservation[];
+  capture: BrowserCaptureResult;
   errors: BrowserRunError[];
   resourcesClosed: { context: boolean; browser: boolean };
 }
@@ -129,6 +132,11 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
     const started = performance.now();
     const observations: BrowserObservation[] = [];
     const runErrors: BrowserRunError[] = [];
+    const capture = new BrowserCapture({
+      startedAt,
+      elapsedMs: () => elapsed(started),
+      ...(options.captureLimits === undefined ? {} : { limits: options.captureLimits }),
+    });
     const blockedUrls: string[] = [];
     let status: BrowserRunResult["status"] = "runner_error";
     let browser: Browser | undefined;
@@ -140,6 +148,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
     let finalStorage: StorageSnapshot | null = null;
     let contextClosed = false;
     let browserClosed = false;
+    let captureResult: BrowserCaptureResult | undefined;
     let deadline: NodeJS.Timeout | undefined;
 
     try {
@@ -164,10 +173,12 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
       });
       page = await context.newPage();
       registerListeners(page, observations, started);
+      capture.attach(page);
 
       const flow = (async () => {
         await page.goto(target.href, { waitUntil: "load", timeout: options.navigationTimeoutMs });
         if ((options.observeAfterLoadMs ?? 0) > 0) await page.waitForTimeout(options.observeAfterLoadMs ?? 0);
+        await capture.capturePage(page);
         if (blockedUrls.length > 0) throw new UrlPolicyError(`blocked ${blockedUrls.length} request(s) outside the fixture origin`);
         const storage = await readStorage(page);
         initialStorage = storage.initial;
@@ -207,6 +218,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
     } finally {
       if (deadline !== undefined) clearTimeout(deadline);
       if (page !== undefined) finalUrl = page.url() || finalUrl;
+      captureResult = await capture.finalize();
       if (context !== undefined) {
         try {
           await context.close();
@@ -246,6 +258,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
       initialStorage,
       finalStorage,
       observations,
+      capture: captureResult ?? await capture.finalize(),
       errors: runErrors,
       resourcesClosed: { context: contextClosed, browser: browserClosed },
     };

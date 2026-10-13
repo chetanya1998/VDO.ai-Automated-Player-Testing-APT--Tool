@@ -4,15 +4,17 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–04 are implemented:
+Tasks 01–05 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
 - twelve local synthetic publisher scenarios covering healthy and broken player behavior;
 - a bounded Playwright Chromium runner with isolated contexts, navigation and total deadlines, partial observations, cleanup, and crash classification;
+- structured browser evidence for requests, responses, failures, logger payloads, console errors, frames, player references, and bounded screenshots;
+- credential and query-value redaction, approved response-body limits, distinct evidence IDs, and explicit collection gaps;
 - a loopback-only URL policy that keeps unrestricted remote execution disabled.
 
-Browser evidence normalization and product verdict rules start in Task 05. This repository does not yet claim validation of a live publisher or real ad demand.
+Versioned logger validation, browser evidence normalization, and product verdict rules start in Task 22. This repository does not yet claim validation of a live publisher or real ad demand.
 
 ## Requirements
 
@@ -46,7 +48,7 @@ pnpm test
 ```text
 config/profiles/        Fixture-only execution profile
 docs/                   Integration contract and implementation plan
-src/browser/            Bounded browser runner and URL policy
+src/browser/            Bounded browser runner, evidence capture, and URL policy
 src/contracts.ts        Runtime-validated shared contracts
 src/cli.ts              Profile validation CLI
 tests/fixtures/         Synthetic publisher pages and mock endpoints
@@ -63,5 +65,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 05: capture and normalize browser evidence.
+The next implementation task is Task 22: parse and validate browser logger payloads.
 

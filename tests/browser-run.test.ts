@@ -32,7 +32,17 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
         for (const listener of listeners.get(name) ?? []) listener(...args);
       };
       const requestResource = async (url: string, timeoutMs: number): Promise<string> => {
-        const request = { url: () => url, failure: () => ({ errorText: "timed out" }) };
+        const resourceType = url.endsWith(".js") ? "script" : "document";
+        const request = {
+          url: () => url,
+          method: () => "GET",
+          resourceType: () => resourceType,
+          headers: () => ({}),
+          postData: () => null,
+          frame: () => ({ url: () => currentUrl }),
+          redirectedFrom: () => null,
+          failure: () => ({ errorText: "timed out" }),
+        };
         emit("request", request);
         let allowed = false;
         await routeHandler?.({
@@ -45,8 +55,17 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
         try {
           const response = await fetch(url, { signal: controller.signal });
-          emit("response", { url: () => url, status: () => response.status });
-          return await response.text();
+          const text = await response.text();
+          emit("response", {
+            url: () => url,
+            status: () => response.status,
+            statusText: () => response.statusText,
+            request: () => request,
+            headers: () => Object.fromEntries(response.headers),
+            finished: async () => null,
+            body: async () => Buffer.from(text),
+          });
+          return text;
         } catch (error) {
           emit("requestfailed", request);
           if ((error as Error).name === "AbortError") throw new errors.TimeoutError(`navigation timeout after ${timeoutMs}ms`);
@@ -82,13 +101,17 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
             resolve();
           }, milliseconds));
         },
-        async evaluate() {
+        async evaluate(pageFunction: unknown) {
+          if (String(pageFunction).includes("querySelectorAll")) return [];
           const scenarioId = decodeURIComponent(new URL(currentUrl).pathname.split("/").at(-1) ?? "unknown");
           return {
             initial: { cookie: "", localStorageKeys: [] },
             final: { cookie: `fixture-run=${scenarioId}`, localStorageKeys: ["fixture-run"] },
           };
         },
+        title: async () => "Synthetic fixture",
+        frames: () => [{ name: () => "", url: () => currentUrl }],
+        screenshot: async () => Buffer.from("fixture-image"),
         url: () => currentUrl,
       } as unknown as Page;
 
@@ -145,6 +168,9 @@ test("bounded fixture browser execution", async (suite) => {
     assert.equal(healthy.metadata.egressBoundary.unrestrictedRemoteExecution, false);
     assert.ok(healthy.observations.some((event) => event.kind === "request"));
     assert.ok(healthy.observations.some((event) => event.kind === "response"));
+    assert.ok(healthy.capture.evidence.some((item) => item.source === "browser_network"));
+    assert.ok(healthy.capture.evidence.some((item) => item.source === "browser_dom"));
+    assert.ok(healthy.capture.gaps.some((gap) => gap.code === "service_worker_visibility"));
     assert.deepEqual(healthy.resourcesClosed, { context: true, browser: true });
 
     const stalled = await runner(options(fixture.origin, fixture.scenarioUrl("stalled-response"), {
