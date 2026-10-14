@@ -7,6 +7,7 @@ import { normalizeEvidence } from "./evidence/normalize.js";
 import { parseEventAliasProfile } from "./logger/browser-payload.js";
 import type { Product, SiteTagProfile } from "./profile/tag-identity.js";
 import { buildReport } from "./report/build.js";
+import { parseEventRulePolicy, validateEvents } from "./rules/events.js";
 import { validateIntegration, type IntegrationExpectation } from "./rules/integration.js";
 import { validateLoggerPresence } from "./rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "./rules/timing.js";
@@ -18,6 +19,7 @@ interface ReportArguments {
   browserPath: string;
   aliasesPath: string;
   timingPath: string;
+  eventRulesPath: string;
   deviceId?: string;
   observeMs: number;
   timeoutMs: number;
@@ -53,7 +55,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 
 function reportArguments(args: string[]): ReportArguments {
   const [targetUrl, profilePath, outputPath] = args;
-  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
+  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
   const deviceId = option(args, "--device");
   return {
     targetUrl,
@@ -62,6 +64,7 @@ function reportArguments(args: string[]): ReportArguments {
     browserPath: nonempty(option(args, "--browser", process.env.VDO_VALIDATOR_BROWSER), "--browser or VDO_VALIDATOR_BROWSER"),
     aliasesPath: nonempty(option(args, "--aliases"), "--aliases"),
     timingPath: nonempty(option(args, "--timing"), "--timing"),
+    eventRulesPath: nonempty(option(args, "--event-rules"), "--event-rules"),
     ...(deviceId === undefined ? {} : { deviceId }),
     observeMs: nonnegativeInteger(option(args, "--observe-ms", "5000"), "--observe-ms"),
     timeoutMs: positiveInteger(option(args, "--timeout-ms", "300000"), "--timeout-ms"),
@@ -145,6 +148,8 @@ async function generateReport(args: string[]): Promise<void> {
   if (aliases.status !== "confirmed" || aliases.profileId !== profile.profileId) throw new TypeError("report requires confirmed event aliases for the selected profile");
   const timing = parseTimingPolicy(JSON.parse(await readFile(input.timingPath, "utf8")));
   if (timing.status !== "confirmed") throw new TypeError("report requires a confirmed timing policy");
+  const eventRules = parseEventRulePolicy(JSON.parse(await readFile(input.eventRulesPath, "utf8")));
+  if (eventRules.status !== "confirmed" || eventRules.profileId !== profile.profileId) throw new TypeError("report requires confirmed event rules for the selected profile");
   const device = selectedDevice(profile, input.deviceId);
   const viewport = object(device.viewport, `profile.devices.${device.id}.viewport`);
   const expectation = integrationExpectation(rawProfile);
@@ -207,6 +212,14 @@ async function generateReport(args: string[]): Promise<void> {
       loaderUrl: expectation.loaderUrl,
       captureComplete: browser.status === "completed" && browser.capture.complete,
     }),
+    ...validateEvents({
+      evidence: bundle.evidence,
+      policy: eventRules,
+      deviceId: run.deviceId,
+      articleEpochId: articleEpoch.articleEpochId,
+      activeTags: [expectation.tagName],
+      captureComplete: browser.status === "completed" && browser.capture.complete,
+    }),
   ];
   const checks = browser.status === "runner_error"
     ? markExecutionUnverified(evaluatedChecks, browser.errors.map((error) => error.message).join("; ") || "browser runner error")
@@ -243,7 +256,7 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json>");
+  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json>");
 }
 
 main().catch((error: unknown) => {

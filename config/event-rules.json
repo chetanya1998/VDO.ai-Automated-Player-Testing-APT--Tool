@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-event-lifecycle-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "flow": {
+    "expected": "auto",
+    "servedIndicators": ["ad_match", "video_loaded", "viewable_impression"],
+    "noAdIndicators": ["ad_request", "video_start"],
+    "interruptEvents": ["blocked_player", "blocked_inline", "blocked_autoplay", "blocked_ima", "blocked_agent", "blocked_device", "blocked_url", "error"]
+  },
+  "required": {
+    "common": ["loaded", "init_vdo", "forceplay", "auto_plays", "pageview", "came_in_view"],
+    "commonAnyOf": [["began_atf", "began_btf"]],
+    "served": ["ad_request", "ad_match", "video_loaded", "video_start", "website_pageview_match", "pageview_match", "viewable_impression"],
+    "noAd": ["ad_request", "video_start"],
+    "replay": "optional"
+  },
+  "order": {
+    "common": [["loaded", "init_vdo"], ["init_vdo", "pageview"]],
+    "served": [["ad_request", "ad_match"], ["ad_match", "video_loaded"], ["video_loaded", "video_start"]],
+    "noAd": [["ad_request", "video_start"]]
+  },
+  "pageview": {
+    "perTag": 1,
+    "websiteMinimum": 0,
+    "websiteMaximum": 1,
+    "loadedPerTag": 1
+  },
+  "adRequest": {
+    "state": "enabled",
+    "event": "ad_request",
+    "eligibilityAllOf": ["init_vdo", "came_in_view"],
+    "eligibilityAnyOf": ["auto_plays", "forceplay"]
+  }
+}
