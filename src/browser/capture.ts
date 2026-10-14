@@ -6,6 +6,13 @@ import { captureDomSnapshot } from "./dom.js";
 const SENSITIVE_KEYS = /^(?:authorization|cookie|set-cookie|password|passwd|secret|token|access_token|api_key|apikey|key|jwt|session|sessionid)$/i;
 const LOGGER_RESOURCE_TYPES = new Set(["xhr", "fetch", "ping"]);
 const RESPONSE_BODY_TYPES = ["application/json", "text/plain"];
+const INCOMPLETE_GAPS = new Set<CollectionGap["code"]>([
+  "service_worker_visibility",
+  "evidence_limit_reached",
+  "pending_capture_timeout",
+  "request_incomplete",
+  "page_capture_unavailable",
+]);
 
 export interface CaptureLimits {
   maxEvidenceRecords: number;
@@ -44,6 +51,7 @@ export interface BrowserCaptureOptions {
   startedAt: Date;
   elapsedMs(): number;
   limits?: Partial<CaptureLimits>;
+  serviceWorkersBlocked?: boolean;
 }
 
 interface PendingRequest {
@@ -131,7 +139,7 @@ export class BrowserCapture {
   constructor(options: BrowserCaptureOptions) {
     this.#options = options;
     this.#limits = { ...DEFAULT_LIMITS, ...options.limits };
-    this.#gap(
+    if (!options.serviceWorkersBlocked) this.#gap(
       "service_worker_visibility",
       "Page-level browser events may not expose traffic handled entirely inside a service worker; service workers remain enabled.",
       null,
@@ -218,7 +226,7 @@ export class BrowserCapture {
     return {
       evidence: this.#evidence,
       gaps: this.#gaps,
-      complete: this.#gaps.length === 0,
+      complete: !this.#gaps.some((gap) => INCOMPLETE_GAPS.has(gap.code)),
     };
   }
 

@@ -73,6 +73,7 @@ export interface Profile {
   profileStatus: "fixture_only" | "production";
   site: {
     approvedUrls: string[];
+    approvedResourceOrigins?: string[];
     [key: string]: unknown;
   };
   devices: Array<{
@@ -257,6 +258,13 @@ export function parseProfile(value: unknown): Profile {
     throw new TypeError("profile.site.approvedUrls must contain at least one URL");
   }
   approvedUrls.forEach((url, index) => httpUrl(url, `profile.site.approvedUrls[${index}]`));
+  if (site.approvedResourceOrigins !== undefined) {
+    if (!Array.isArray(site.approvedResourceOrigins)) throw new TypeError("profile.site.approvedResourceOrigins must be an array");
+    site.approvedResourceOrigins.forEach((url, index) => {
+      const parsed = new URL(httpUrl(url, `profile.site.approvedResourceOrigins[${index}]`));
+      if (parsed.href !== parsed.origin + "/") throw new TypeError(`profile.site.approvedResourceOrigins[${index}] must be an origin`);
+    });
+  }
 
   if (!Array.isArray(object.devices) || object.devices.length === 0) {
     throw new TypeError("profile.devices must contain at least one device");

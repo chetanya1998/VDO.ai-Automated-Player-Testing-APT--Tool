@@ -174,7 +174,8 @@ test("bounded fixture browser execution", async (suite) => {
     assert.ok(healthy.observations.some((event) => event.kind === "response"));
     assert.ok(healthy.capture.evidence.some((item) => item.source === "browser_network"));
     assert.ok(healthy.capture.evidence.some((item) => item.source === "browser_dom"));
-    assert.ok(healthy.capture.gaps.some((gap) => gap.code === "service_worker_visibility"));
+    assert.equal(healthy.capture.gaps.some((gap) => gap.code === "service_worker_visibility"), false);
+    assert.equal(healthy.capture.complete, true);
     assert.deepEqual(healthy.resourcesClosed, { context: true, browser: true });
 
     const stalled = await runner(options(fixture.origin, fixture.scenarioUrl("stalled-response"), {

@@ -105,7 +105,8 @@ function validateLoader(input: IntegrationValidationInput, loaders: LoaderObserv
   }
   const scripts = dom === null ? [] : records(dom.data.externalScripts).filter((script) => text(script.tagNameFromUrl) === input.expectation.tagName);
   if (scripts.some((script) => text(script.scriptType) !== input.expectation.expectedScriptType)) failures.push("external loader script type did not match the profile");
-  return result(input, "TC-1", failures.length === 0 ? "PASS" : "FAIL", {
+  const verdict = expected.length === 0 && dom === null ? "UNKNOWN" : failures.length === 0 ? "PASS" : "FAIL";
+  return result(input, "TC-1", verdict, {
     loaderUrl: expectedIdentity.canonical,
     resourceType: "script",
     status: 200,
@@ -114,14 +115,13 @@ function validateLoader(input: IntegrationValidationInput, loaders: LoaderObserv
     matchingRequests: expected.length,
     requests: expected.map((loader) => ({ url: loader.url, status: loader.status, outcome: loader.outcome, resourceType: loader.resourceType, initiator: loader.initiator })),
     failures,
-  }, expected.length > 0 ? expected.map((loader) => loader.evidenceId) : loaders.map((loader) => loader.evidenceId));
+  }, expected.length > 0 ? expected.map((loader) => loader.evidenceId) : [...loaders.map((loader) => loader.evidenceId), ...(dom === null ? [] : [dom.evidenceId])]);
 }
 
 function validateCounts(input: IntegrationValidationInput, loaders: LoaderObservation[], dom: Evidence | null): CheckResult {
   const requestCount = loaders.filter((loader) => loader.tagName === input.expectation.tagName).length;
   if (dom === null) {
-    const verdict = requestCount === input.expectation.expectedRequestCount ? "UNKNOWN" : "FAIL";
-    return result(input, "TC-3", verdict, "network and DOM counts", { requestCount, dom: "unavailable" }, loaders.map((loader) => loader.evidenceId));
+    return result(input, "TC-3", "UNKNOWN", "network and DOM counts", { requestCount, dom: "unavailable" }, loaders.map((loader) => loader.evidenceId));
   }
   const anchors = records(dom.data.anchors).filter((anchor) => text(anchor.id) === input.expectation.tagName);
   const externalScripts = records(dom.data.externalScripts).filter((script) => text(script.tagNameFromUrl) === input.expectation.tagName);

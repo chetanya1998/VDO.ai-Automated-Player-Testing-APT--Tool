@@ -5,8 +5,7 @@ import {
   PRODUCTION_EGRESS_BOUNDARY,
   UrlPolicyError,
   assertApprovedUrl,
-  createFixtureUrlPolicy,
-  type FixtureUrlPolicy,
+  createBrowserUrlPolicy,
 } from "./url-policy.js";
 
 export interface BrowserRunOptions {
@@ -18,6 +17,7 @@ export interface BrowserRunOptions {
   totalTimeoutMs: number;
   observeAfterLoadMs?: number;
   captureLimits?: Partial<CaptureLimits>;
+  allowRemoteOrigins?: boolean;
 }
 
 export interface BrowserObservation {
@@ -128,7 +128,7 @@ async function readStorage(page: Page): Promise<{ initial: StorageSnapshot; fina
 export function createBrowserRunner(dependencies: BrowserRunnerDependencies = defaultDependencies) {
   return async function runBrowser(options: BrowserRunOptions): Promise<BrowserRunResult> {
     validateOptions(options);
-    const policy = createFixtureUrlPolicy(options.approvedOrigins);
+    const policy = createBrowserUrlPolicy(options.approvedOrigins, options.allowRemoteOrigins ?? false);
     const target = assertApprovedUrl(options.targetUrl, policy);
     const startedAt = new Date();
     const started = performance.now();
@@ -137,6 +137,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
     const capture = new BrowserCapture({
       startedAt,
       elapsedMs: () => elapsed(started),
+      serviceWorkersBlocked: true,
       ...(options.captureLimits === undefined ? {} : { limits: options.captureLimits }),
     });
     const blockedUrls: string[] = [];
@@ -160,7 +161,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
         timeout: options.totalTimeoutMs,
       });
       browserVersion = browser.version();
-      context = await browser.newContext({ viewport: options.viewport });
+      context = await browser.newContext({ viewport: options.viewport, serviceWorkers: "block" });
       await context.addInitScript(`globalThis.__vdoInitialStorage={cookie:document.cookie,localStorageKeys:Object.keys(localStorage).sort()}`);
       await context.addInitScript(DOM_TRACKER_INIT_SCRIPT);
       await context.route("**/*", async (route) => {

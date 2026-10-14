@@ -10,6 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test --test-isolation=none dist/tests/*.test.js",
+    "report": "tsc -p tsconfig.json && node dist/src/cli.js report",
     "validate:fixture-profile": "tsc -p tsconfig.json && node dist/src/cli.js validate-profile config/profiles/fixture-video-inline-v1.json"
   },
   "devDependencies": {
