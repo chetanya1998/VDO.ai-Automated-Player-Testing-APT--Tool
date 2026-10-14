@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11, and 22–24 are implemented:
+Tasks 01–08, 11, 22–24, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -19,9 +19,10 @@ Tasks 01–08, 11, and 22–24 are implemented:
 - draft cold-cache script timing bands plus logger request-duration and raw event-gap measurements;
 - TC-4 logger presence/status checks and a schema-versioned JSON report containing all TC-1 through TC-23 outcomes, evidence, coverage, verdict counts, and separate execution errors;
 - versioned TC-5/6/7/9/22 lifecycle, required-event, pageview-count, eligible-ad-request, and per-article count rules for served and no-ad paths;
+- versioned TC-11/12 expected-block, error-code, event-window, and product-specific dependency rules that preserve recovery/failure evidence without inferring an ad blocker;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
-Logger lifecycle, demand, viewability, and remaining product verdict rules are still pending. No approved production profile and live URL have been supplied, so this repository does not yet claim validation of a live publisher or real ad demand.
+Ad-demand outcomes, viewability, and remaining product verdict rules are still pending. No approved production profile and live URL have been supplied, so this repository does not yet claim validation of a live publisher or real ad demand.
 
 ## Requirements
 
@@ -50,10 +51,11 @@ pnpm report -- "https://approved.example/article" "config/profiles/production.js
   --browser "C:\Program Files\Google\Chrome\Application\chrome.exe" `
   --aliases "config/production-event-aliases.json" `
   --timing "config/production-timing.json" `
-  --event-rules "config/production-event-rules.json"
+  --event-rules "config/production-event-rules.json" `
+  --runtime-policy "config/production-runtime-policy.json"
 ```
 
-The report command requires a `production` profile, confirmed event aliases, a confirmed timing policy, and confirmed event rules for the same profile. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Output files are created once and never overwritten.
+The report command requires a `production` profile plus confirmed event aliases, timing, event rules, and runtime policy for that profile. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Output files are created once and never overwritten.
 
 Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
 
@@ -90,5 +92,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 29: classify blocked events and dependency failures.
+The next implementation task is Task 12: validate ad request outcomes.
 

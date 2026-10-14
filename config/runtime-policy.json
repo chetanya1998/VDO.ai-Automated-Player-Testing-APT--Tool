@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-runtime-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "blocks": {
+    "blocked_player": { "expectation": "unknown", "byDevice": {} },
+    "blocked_inline": { "expectation": "unknown", "byDevice": {} },
+    "blocked_autoplay": { "expectation": "unknown", "byDevice": {} },
+    "blocked_ima": { "expectation": "unknown", "byDevice": {} },
+    "blocked_agent": { "expectation": "unknown", "byDevice": {} },
+    "blocked_device": { "expectation": "unknown", "byDevice": {} },
+    "blocked_url": { "expectation": "unknown", "byDevice": {} },
+    "error": { "expectation": "unknown", "byDevice": {} }
+  },
+  "forceplayFailureAttempts": 5,
+  "errorCodes": {
+    "Q2": { "meaning": "missing_anchor" },
+    "Bn": { "meaning": null }
+  },
+  "dependencies": [
+    { "id": "vdo.ai.js", "products": ["video"], "required": true, "pathSuffixes": ["/vdo.ai.js"] },
+    { "id": "analytics.js", "products": ["video"], "required": true, "pathSuffixes": ["/analytics.js"] },
+    { "id": "allowed_url", "products": ["video"], "required": true, "pathSuffixes": ["/allowed_url"] },
+    { "id": "min.js", "products": ["video"], "required": true, "pathSuffixes": ["/min.js"] },
+    { "id": "ima3.js", "products": ["video"], "required": true, "pathSuffixes": ["/ima3.js"] },
+    { "id": "vdo.player.js", "products": ["video"], "required": true, "pathSuffixes": ["/vdo.player.js"] },
+    { "id": "prebid.js", "products": ["video"], "required": true, "pathSuffixes": ["/prebid.js"] },
+    { "id": "rtb.js", "products": ["video"], "required": true, "pathSuffixes": ["/rtb.js"] }
+  ]
+}
