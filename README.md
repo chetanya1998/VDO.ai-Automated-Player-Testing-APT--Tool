@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–07 and Tasks 22–23 are implemented:
+Tasks 01–07 and Tasks 22–24 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -16,9 +16,10 @@ Tasks 01–07 and Tasks 22–23 are implemented:
 - deterministic profile snapshots and normalized evidence with retained duplicates, raw artifact references, timing, article scope, and separate player instances;
 - explicit site/domain/tag/product mappings with supported suffix variants, multiple-tag identities, and unverified candidate suggestions;
 - evidence-backed loader, per-tag duplicate, anchor, external/bootstrap script, DOM placement, floating, and lifecycle checks;
+- draft cold-cache script timing bands plus logger request-duration and raw event-gap measurements;
 - a loopback-only URL policy that keeps unrestricted remote execution disabled.
 
-Timing, logger lifecycle, demand, viewability, and remaining product verdict rules are still pending. This repository does not yet claim validation of a live publisher or real ad demand.
+Logger lifecycle, demand, viewability, and remaining product verdict rules are still pending. This repository does not yet claim validation of a live publisher or real ad demand.
 
 ## Requirements
 
@@ -74,5 +75,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 24: measure script and logger timing.
+The next implementation task is Task 08: produce the first deterministic report.
 

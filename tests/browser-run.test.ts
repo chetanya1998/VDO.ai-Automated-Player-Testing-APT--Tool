@@ -168,6 +168,8 @@ test("bounded fixture browser execution", async (suite) => {
     assert.equal(healthy.metadata.coldCache, "new_context");
     assert.deepEqual(healthy.metadata.viewport, { width: 1280, height: 720 });
     assert.equal(healthy.metadata.egressBoundary.unrestrictedRemoteExecution, false);
+    assert.equal(healthy.metadata.coldCache, "new_context");
+    assert.equal(healthy.metadata.networkConditions, "host_default_unshaped");
     assert.ok(healthy.observations.some((event) => event.kind === "request"));
     assert.ok(healthy.observations.some((event) => event.kind === "response"));
     assert.ok(healthy.capture.evidence.some((item) => item.source === "browser_network"));

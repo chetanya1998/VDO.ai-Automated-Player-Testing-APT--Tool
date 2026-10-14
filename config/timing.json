@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-draft-v1",
+  "status": "synthetic_draft",
+  "script": {
+    "passMaxMs": 500,
+    "warningMaxMs": 1000
+  },
+  "logger": {
+    "warningAboveMs": 500,
+    "failureAboveMs": null,
+    "eventGapThresholdMs": null
+  }
+}

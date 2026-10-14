@@ -168,6 +168,8 @@ export function normalizeEvidence(input: NormalizeEvidenceInput): NormalizedEvid
       normalizedData.canonicalEvent = parsedLogger.canonicalEvent;
       normalizedData.payloadDiagnostics = parsedLogger.diagnostics.map((diagnostic) => ({ code: diagnostic.code, severity: diagnostic.severity, field: diagnostic.field }));
       normalizedData.requestStartedMs = network?.data.startedMs ?? null;
+      normalizedData.requestDurationMs = network?.data.durationMs ?? null;
+      normalizedData.requestOutcome = network?.data.outcome ?? null;
     }
     evidence.push(parseEvidence({
       schemaVersion: 1,

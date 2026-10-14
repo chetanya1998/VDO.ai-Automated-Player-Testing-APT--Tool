@@ -52,6 +52,7 @@ export interface BrowserRunResult {
     os: NodeJS.Platform;
     viewport: { width: number; height: number };
     coldCache: "new_context";
+    networkConditions: "host_default_unshaped";
     egressBoundary: typeof PRODUCTION_EGRESS_BOUNDARY;
   };
   initialStorage: StorageSnapshot | null;
@@ -255,6 +256,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
         os: process.platform,
         viewport: options.viewport,
         coldCache: "new_context",
+        networkConditions: "host_default_unshaped",
         egressBoundary: PRODUCTION_EGRESS_BOUNDARY,
       },
       initialStorage,

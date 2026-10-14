@@ -48,6 +48,7 @@ const capture: BrowserCaptureResult = {
       url: "https://publisher.example/logger.php",
       requestStartPageUrl: "https://publisher.example/articles/one",
       startedMs: 20,
+      durationMs: 30,
       outcome: "http_success",
     }),
     captured("logger-late", "browser_logger", "2026-10-13T00:00:00.021Z", {
@@ -62,6 +63,7 @@ const capture: BrowserCaptureResult = {
       url: "https://publisher.example/logger.php",
       requestStartPageUrl: "https://publisher.example/articles/one",
       startedMs: 10,
+      durationMs: 12,
       outcome: "http_success",
     }),
     captured("logger-early", "browser_logger", "2026-10-13T00:00:00.011Z", {
@@ -98,6 +100,9 @@ test("normalization preserves duplicates, timing, source, article scope, and sep
   assert.equal(logger?.capturedAt, "2026-10-13T00:00:00.011Z");
   assert.equal(logger?.data.observationTime, "2026-10-13T00:00:00.011Z");
   assert.equal(logger?.data.eventTime, "2026-10-13T00:00:00.010Z");
+  assert.equal(logger?.data.requestStartedMs, 10);
+  assert.equal(logger?.data.requestDurationMs, 12);
+  assert.equal(logger?.data.requestOutcome, "http_success");
   assert.equal(logger?.data.rawEvent, "Pageview");
   assert.equal(logger?.data.canonicalEvent, "pageview");
   assert.equal(logger?.data.sessionId, null);
