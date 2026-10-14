@@ -5,7 +5,7 @@ import { captureDomSnapshot } from "./dom.js";
 
 const SENSITIVE_KEYS = /^(?:authorization|cookie|set-cookie|password|passwd|secret|token|access_token|api_key|apikey|key|jwt|session|sessionid)$/i;
 const LOGGER_RESOURCE_TYPES = new Set(["xhr", "fetch", "ping"]);
-const RESPONSE_BODY_TYPES = ["application/json", "text/plain"];
+const RESPONSE_BODY_TYPES = ["application/json", "text/plain", "application/xml", "text/xml"];
 const INCOMPLETE_GAPS = new Set<CollectionGap["code"]>([
   "service_worker_visibility",
   "evidence_limit_reached",
@@ -281,7 +281,7 @@ export class BrowserCapture {
     pending.evidence.data.responseHeaders = selectedHeaders(headers);
 
     const contentType = (headers["content-type"] ?? "").toLowerCase();
-    if (!RESPONSE_BODY_TYPES.some((type) => contentType.includes(type))) {
+    if (!RESPONSE_BODY_TYPES.some((type) => contentType.includes(type)) && !contentType.includes("+xml")) {
       pending.evidence.data.responseBody = { state: "omitted", reason: "unapproved_content_type" };
       return;
     }

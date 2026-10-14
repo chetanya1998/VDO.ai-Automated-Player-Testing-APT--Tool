@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-demand-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "limits": {
+    "maxBodyBytes": 16384,
+    "maxXmlDepth": 16,
+    "maxWrappers": 5,
+    "supportedVastVersions": ["3.0", "4.0", "4.1", "4.2", "4.3"]
+  },
+  "chain": ["ad_request", "ad_match", "video_loaded", "video_start", "viewable_impression"],
+  "providers": [
+    { "id": "gam", "products": ["video"], "required": true, "format": "gam_json", "pathContains": ["/mock-demand"], "deadlineMs": 3000 },
+    { "id": "vast", "products": ["video"], "required": false, "format": "vast_xml", "pathContains": ["/vast"], "deadlineMs": 3000 },
+    { "id": "prebid", "products": ["video"], "required": false, "format": "prebid_json", "pathContains": ["/openrtb2/auction"], "deadlineMs": 2000 },
+    { "id": "reseller", "products": ["video"], "required": false, "format": "reseller_json", "pathContains": ["/reseller"], "deadlineMs": 3000 }
+  ]
+}

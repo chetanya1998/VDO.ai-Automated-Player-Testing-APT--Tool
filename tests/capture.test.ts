@@ -175,3 +175,14 @@ test("page evidence is bounded and oversized screenshots become a visible gap", 
   assert.equal(result.evidence.some((item) => item.source === "screenshot"), false);
   assert.ok(result.gaps.some((gap) => gap.code === "screenshot_too_large"));
 });
+
+test("bounded XML response bodies are retained for offline VAST parsing", async () => {
+  const run = harness();
+  const request = fakeRequest({ url: "http://127.0.0.1/vast", resourceType: "xhr" });
+  const vast = '<VAST version="4.2"><Ad><InLine></InLine></Ad></VAST>';
+  run.emit("request", request);
+  run.emit("response", fakeResponse(request, { status: 200, contentType: "application/vast+xml", body: vast }));
+  const result = await run.capture.finalize();
+  const network = result.evidence.find((item) => item.source === "browser_network");
+  assert.deepEqual(network?.data.responseBody, { state: "captured", contentType: "application/vast+xml", text: vast });
+});

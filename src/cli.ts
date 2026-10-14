@@ -8,6 +8,7 @@ import { parseEventAliasProfile } from "./logger/browser-payload.js";
 import type { Product, SiteTagProfile } from "./profile/tag-identity.js";
 import { buildReport } from "./report/build.js";
 import { applyRuntimeContext, parseRuntimePolicy, validateBlockedEvents } from "./rules/blocked.js";
+import { applyDemandContext, parseDemandPolicy, validateDemand } from "./rules/demand.js";
 import { validateDependencies } from "./rules/dependencies.js";
 import { parseEventRulePolicy, validateEvents } from "./rules/events.js";
 import { validateIntegration, type IntegrationExpectation } from "./rules/integration.js";
@@ -23,6 +24,7 @@ interface ReportArguments {
   timingPath: string;
   eventRulesPath: string;
   runtimePolicyPath: string;
+  demandPolicyPath: string;
   deviceId?: string;
   observeMs: number;
   timeoutMs: number;
@@ -58,7 +60,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 
 function reportArguments(args: string[]): ReportArguments {
   const [targetUrl, profilePath, outputPath] = args;
-  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
+  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
   const deviceId = option(args, "--device");
   return {
     targetUrl,
@@ -69,6 +71,7 @@ function reportArguments(args: string[]): ReportArguments {
     timingPath: nonempty(option(args, "--timing"), "--timing"),
     eventRulesPath: nonempty(option(args, "--event-rules"), "--event-rules"),
     runtimePolicyPath: nonempty(option(args, "--runtime-policy"), "--runtime-policy"),
+    demandPolicyPath: nonempty(option(args, "--demand-policy"), "--demand-policy"),
     ...(deviceId === undefined ? {} : { deviceId }),
     observeMs: nonnegativeInteger(option(args, "--observe-ms", "5000"), "--observe-ms"),
     timeoutMs: positiveInteger(option(args, "--timeout-ms", "300000"), "--timeout-ms"),
@@ -156,6 +159,8 @@ async function generateReport(args: string[]): Promise<void> {
   if (eventRules.status !== "confirmed" || eventRules.profileId !== profile.profileId) throw new TypeError("report requires confirmed event rules for the selected profile");
   const runtimePolicy = parseRuntimePolicy(JSON.parse(await readFile(input.runtimePolicyPath, "utf8")));
   if (runtimePolicy.status !== "confirmed" || runtimePolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed runtime policy for the selected profile");
+  const demandPolicy = parseDemandPolicy(JSON.parse(await readFile(input.demandPolicyPath, "utf8")));
+  if (demandPolicy.status !== "confirmed" || demandPolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed demand policy for the selected profile");
   const device = selectedDevice(profile, input.deviceId);
   const viewport = object(device.viewport, `profile.devices.${device.id}.viewport`);
   const expectation = integrationExpectation(rawProfile);
@@ -225,6 +230,7 @@ async function generateReport(args: string[]): Promise<void> {
   };
   const dependencies = validateDependencies(runtimeShared);
   const blocked = validateBlockedEvents(runtimeShared);
+  const demand = validateDemand({ ...runtimeShared, policy: demandPolicy });
   const evaluatedChecks = [
     ...validateIntegration({ ...shared, expectation }),
     ...validateTiming({
@@ -238,9 +244,10 @@ async function generateReport(args: string[]): Promise<void> {
       loaderUrl: expectation.loaderUrl,
       captureComplete: browser.status === "completed" && browser.capture.complete,
     }),
-    ...applyRuntimeContext(eventChecks, blocked, dependencies),
+    ...applyDemandContext(applyRuntimeContext(eventChecks, blocked, dependencies), demand),
     blocked.check,
     dependencies,
+    demand.check,
   ];
   const checks = browser.status === "runner_error"
     ? markExecutionUnverified(evaluatedChecks, browser.errors.map((error) => error.message).join("; ") || "browser runner error")
@@ -277,7 +284,7 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json>");
+  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json>");
 }
 
 main().catch((error: unknown) => {
