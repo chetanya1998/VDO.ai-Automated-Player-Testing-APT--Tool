@@ -2,6 +2,7 @@ import type { ConsoleMessage, Page, Request, Response } from "playwright-core";
 import type { EvidenceSource, JsonValue } from "../contracts.js";
 import { extractAllowlistedLoggerFields } from "../logger/browser-payload.js";
 import { captureDomSnapshot } from "./dom.js";
+import { captureVisibilitySnapshot, type VisibilitySnapshot } from "./visibility.js";
 
 const SENSITIVE_KEYS = /^(?:authorization|cookie|set-cookie|password|passwd|secret|token|access_token|api_key|apikey|key|jwt|session|sessionid)$/i;
 const LOGGER_RESOURCE_TYPES = new Set(["xhr", "fetch", "ping"]);
@@ -205,6 +206,16 @@ export class BrowserCapture {
     }
   }
 
+  async captureVisibility(page: Page, reason: VisibilitySnapshot["reason"], triggerNetworkEvidenceId: string | null = null, triggerEvent: string | null = null): Promise<void> {
+    if (this.#closed) return;
+    try {
+      const snapshot = await captureVisibilitySnapshot(page, { sampledMs: this.#options.elapsedMs(), reason, triggerNetworkEvidenceId, triggerEvent });
+      this.#push("browser_dom", { kind: "visibility_sample", pageUrl: sanitizeUrl(page.url()), ...redactValue(snapshot) as Record<string, JsonValue> });
+    } catch (error) {
+      this.#gap("page_capture_unavailable", `Visibility sample unavailable: ${redactText(error instanceof Error ? error.message : String(error))}`, null);
+    }
+  }
+
   async finalize(): Promise<BrowserCaptureResult> {
     if (this.#pending.size > 0) {
       let timer: NodeJS.Timeout | undefined;
@@ -265,6 +276,8 @@ export class BrowserCapture {
         parseState: body.parseState,
         fields: redactValue(body.fields),
       });
+      const event = typeof body.fields.event === "string" ? body.fields.event : null;
+      this.#track(this.captureVisibility(page, "logger_event", evidence.evidenceId, event));
     }
   }
 

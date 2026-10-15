@@ -13,8 +13,10 @@ import { applyDemandContext, parseDemandPolicy, validateDemand } from "./rules/d
 import { validateDependencies } from "./rules/dependencies.js";
 import { parseEventRulePolicy, validateEvents } from "./rules/events.js";
 import { validateIntegration, type IntegrationExpectation } from "./rules/integration.js";
+import { validateLayout } from "./rules/layout.js";
 import { validateLoggerPresence } from "./rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "./rules/timing.js";
+import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "./rules/viewability.js";
 
 interface ReportArguments {
   targetUrl: string;
@@ -27,6 +29,7 @@ interface ReportArguments {
   runtimePolicyPath: string;
   demandPolicyPath: string;
   auctionPolicyPath: string;
+  visibilityPolicyPath: string;
   deviceId?: string;
   observeMs: number;
   timeoutMs: number;
@@ -62,7 +65,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 
 function reportArguments(args: string[]): ReportArguments {
   const [targetUrl, profilePath, outputPath] = args;
-  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
+  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
   const deviceId = option(args, "--device");
   return {
     targetUrl,
@@ -75,6 +78,7 @@ function reportArguments(args: string[]): ReportArguments {
     runtimePolicyPath: nonempty(option(args, "--runtime-policy"), "--runtime-policy"),
     demandPolicyPath: nonempty(option(args, "--demand-policy"), "--demand-policy"),
     auctionPolicyPath: nonempty(option(args, "--auction-rules"), "--auction-rules"),
+    visibilityPolicyPath: nonempty(option(args, "--visibility-policy"), "--visibility-policy"),
     ...(deviceId === undefined ? {} : { deviceId }),
     observeMs: nonnegativeInteger(option(args, "--observe-ms", "5000"), "--observe-ms"),
     timeoutMs: positiveInteger(option(args, "--timeout-ms", "300000"), "--timeout-ms"),
@@ -166,6 +170,8 @@ async function generateReport(args: string[]): Promise<void> {
   if (demandPolicy.status !== "confirmed" || demandPolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed demand policy for the selected profile");
   const auctionPolicy = parseAuctionPolicy(JSON.parse(await readFile(input.auctionPolicyPath, "utf8")));
   if (auctionPolicy.status !== "confirmed" || auctionPolicy.profileId !== profile.profileId) throw new TypeError("report requires confirmed auction rules for the selected profile");
+  const visibilityPolicy = parseVisibilityPolicy(JSON.parse(await readFile(input.visibilityPolicyPath, "utf8")));
+  if (visibilityPolicy.status !== "confirmed" || visibilityPolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed visibility policy for the selected profile");
   const device = selectedDevice(profile, input.deviceId);
   const viewport = object(device.viewport, `profile.devices.${device.id}.viewport`);
   const expectation = integrationExpectation(rawProfile);
@@ -189,6 +195,7 @@ async function generateReport(args: string[]): Promise<void> {
     navigationTimeoutMs: Math.min(30_000, input.timeoutMs),
     totalTimeoutMs: input.timeoutMs,
     observeAfterLoadMs: input.observeMs,
+    visibilitySampleIntervalMs: visibilityPolicy.sampleIntervalMs,
   });
   const executionState = browser.status === "completed" ? "completed" : browser.status === "timed_out" ? "timed_out" : "errored";
   const run = parseRun({ ...queued, executionState });
@@ -237,6 +244,8 @@ async function generateReport(args: string[]): Promise<void> {
   const blocked = validateBlockedEvents(runtimeShared);
   const demand = validateDemand({ ...runtimeShared, policy: demandPolicy });
   const auction = validateAuction({ ...runtimeShared, policy: auctionPolicy, demandPolicy });
+  const viewability = validateViewability({ ...runtimeShared, policy: visibilityPolicy });
+  const layout = validateLayout(runtimeShared);
   const evaluatedChecks = [
     ...validateIntegration({ ...shared, expectation }),
     ...validateTiming({
@@ -250,10 +259,12 @@ async function generateReport(args: string[]): Promise<void> {
       loaderUrl: expectation.loaderUrl,
       captureComplete: browser.status === "completed" && browser.capture.complete,
     }),
-    ...applyDemandContext(applyRuntimeContext(eventChecks, blocked, dependencies), demand),
+    ...applyDemandContext(applyRuntimeContext(applyVisibilityContext(eventChecks, viewability), blocked, dependencies), demand),
+    viewability.tc8,
     blocked.check,
     dependencies,
-    applyAuctionContext(demand.check, auction),
+    applyAuctionContext(applyViewabilityContext(demand.check, viewability), auction),
+    layout,
   ];
   const checks = browser.status === "runner_error"
     ? markExecutionUnverified(evaluatedChecks, browser.errors.map((error) => error.message).join("; ") || "browser runner error")
@@ -290,7 +301,7 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json>");
+  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json>");
 }
 
 main().catch((error: unknown) => {

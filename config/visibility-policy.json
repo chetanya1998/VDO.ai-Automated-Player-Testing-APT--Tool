@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-viewability-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "sampleIntervalMs": 100,
+  "maximumSampleGapMs": 250,
+  "cameInViewMinimumPercent": 1,
+  "products": [
+    { "product": "video", "minimumVisiblePercent": 50, "minimumContinuousMs": 2000, "eligibilityEvent": "video_start" },
+    { "product": "banner", "minimumVisiblePercent": 50, "minimumContinuousMs": 1000, "eligibilityEvent": "ad_match" }
+  ]
+}

@@ -101,7 +101,11 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
             resolve();
           }, milliseconds));
         },
-        async evaluate(pageFunction: unknown) {
+        async evaluate(pageFunction: unknown, argument?: unknown) {
+          if (typeof argument === "object" && argument !== null && "reason" in argument) return {
+            sampledMs: 10, reason: "interval", triggerNetworkEvidenceId: null, triggerEvent: null,
+            viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0 }, players: [],
+          };
           if (String(pageFunction).includes("querySelectorAll")) return {
             anchors: [], externalScripts: [], bootstrapScripts: [], mutations: [], players: [],
           };

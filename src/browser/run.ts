@@ -16,6 +16,7 @@ export interface BrowserRunOptions {
   navigationTimeoutMs: number;
   totalTimeoutMs: number;
   observeAfterLoadMs?: number;
+  visibilitySampleIntervalMs?: number;
   captureLimits?: Partial<CaptureLimits>;
   allowRemoteOrigins?: boolean;
 }
@@ -77,6 +78,7 @@ function validateOptions(options: BrowserRunOptions): void {
     ["viewport.height", options.viewport.height],
     ["navigationTimeoutMs", options.navigationTimeoutMs],
     ["totalTimeoutMs", options.totalTimeoutMs],
+    ["visibilitySampleIntervalMs", options.visibilitySampleIntervalMs ?? 100],
   ] as const) {
     if (!Number.isInteger(value) || value <= 0) throw new TypeError(`${name} must be a positive integer`);
   }
@@ -181,7 +183,16 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
 
       const flow = (async () => {
         await page.goto(target.href, { waitUntil: "load", timeout: options.navigationTimeoutMs });
-        if ((options.observeAfterLoadMs ?? 0) > 0) await page.waitForTimeout(options.observeAfterLoadMs ?? 0);
+        await capture.captureVisibility(page, "after_load");
+        let observedMs = 0;
+        const observeAfterLoadMs = options.observeAfterLoadMs ?? 0;
+        const sampleIntervalMs = options.visibilitySampleIntervalMs ?? 100;
+        while (observedMs < observeAfterLoadMs) {
+          const step = Math.min(sampleIntervalMs, observeAfterLoadMs - observedMs);
+          await page.waitForTimeout(step);
+          observedMs += step;
+          await capture.captureVisibility(page, "interval");
+        }
         await capture.capturePage(page);
         if (blockedUrls.length > 0) throw new UrlPolicyError(`blocked ${blockedUrls.length} request(s) outside the fixture origin`);
         const storage = await readStorage(page);

@@ -18,7 +18,14 @@ function fakePage(url = "http://127.0.0.1/scenario"): {
     url: () => url,
     title: async () => "Fixture player",
     frames: () => [{ name: () => "main", url: () => url }],
-    evaluate: async () => ({
+    evaluate: async (_pageFunction: unknown, argument?: unknown) => typeof argument === "object" && argument !== null && "reason" in argument ? ({
+      sampledMs: 10,
+      reason: "after_load",
+      triggerNetworkEvidenceId: null,
+      triggerEvent: null,
+      viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0 },
+      players: [{ tag: "video", id: "v-player", tagName: "v-player", playerState: "ready", present: true, formed: true, frameAccessible: null, viewportState: "in_view", visiblePercent: 100, geometricVisiblePercent: 100, occlusionPercent: 100, rect: { x: 0, y: 0, width: 640, height: 360, top: 0, right: 640, bottom: 360, left: 0 }, clippedRect: { top: 0, right: 640, bottom: 360, left: 0, width: 640, height: 360 }, style: { display: "block", visibility: "visible", opacity: "1", position: "static", zIndex: "auto", transform: "none", overflowX: "visible", overflowY: "visible" }, ancestors: [], occluders: [], blockers: [] }],
+    }) : ({
       anchors: [{ id: "v-player", tag: "video", parentLandmark: "main", placement: "body_content" }],
       externalScripts: [],
       bootstrapScripts: [],
@@ -174,6 +181,16 @@ test("page evidence is bounded and oversized screenshots become a visible gap", 
   assert.ok(result.evidence.some((item) => item.source === "browser_dom"));
   assert.equal(result.evidence.some((item) => item.source === "screenshot"), false);
   assert.ok(result.gaps.some((gap) => gap.code === "screenshot_too_large"));
+});
+
+test("visibility samples retain measured geometry and CSS evidence", async () => {
+  const run = harness();
+  await run.capture.captureVisibility(run.page, "after_load");
+  const result = await run.capture.finalize();
+  const sample = result.evidence.find((item) => item.source === "browser_dom" && item.data.kind === "visibility_sample");
+  assert.equal(sample?.data.sampledMs, 10);
+  assert.equal((sample?.data.players as Array<{ visiblePercent: number }>)[0]?.visiblePercent, 100);
+  assert.deepEqual((sample?.data.players as Array<{ blockers: string[] }>)[0]?.blockers, []);
 });
 
 test("bounded XML response bodies are retained for offline VAST parsing", async () => {
