@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-auction-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "products": [
+    {
+      "product": "video",
+      "cycleStartProvider": "prebid",
+      "refreshMinimumGapMs": 30000,
+      "stages": [
+        { "id": "bidders", "mode": "parallel", "providers": ["prebid", "reseller"], "dependsOn": [], "timeoutMs": 2000, "maxStartSpreadMs": 100 },
+        { "id": "ad-server", "mode": "parallel", "providers": ["gam"], "dependsOn": ["bidders"], "timeoutMs": 3000, "maxStartSpreadMs": 0 }
+      ],
+      "fallbacks": []
+    }
+  ]
+}

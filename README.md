@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–12, 22–24, and 29 are implemented:
+Tasks 01–08, 11–13, 22–24, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -21,9 +21,10 @@ Tasks 01–08, 11–12, 22–24, and 29 are implemented:
 - versioned TC-5/6/7/9/22 lifecycle, required-event, pageview-count, eligible-ad-request, and per-article count rules for served and no-ad paths;
 - versioned TC-11/12 expected-block, error-code, event-window, and product-specific dependency rules that preserve recovery/failure evidence without inferring an ad blocker;
 - bounded VAST XML plus GAM, Prebid, and reseller response adapters with TC-9/10 initiation, no-fill, deadline, wrapper-chain, and first-gap classification;
+- versioned auction-cycle rules for configured parallel stages, waterfalls, dependency timeouts, required fallbacks, and refresh intervals, reported through TC-10 with the violated policy version and evidence;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
-Auction precedence, viewability, and remaining product verdict rules are still pending. No approved production profile, live URL, or real demand capture has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
+Viewability and remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, or confirmed auction order has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
 
 ## Requirements
 
@@ -54,10 +55,11 @@ pnpm report -- "https://approved.example/article" "config/profiles/production.js
   --timing "config/production-timing.json" `
   --event-rules "config/production-event-rules.json" `
   --runtime-policy "config/production-runtime-policy.json" `
-  --demand-policy "config/production-demand-policy.json"
+  --demand-policy "config/production-demand-policy.json" `
+  --auction-rules "config/production-auction-rules.json"
 ```
 
-The report command requires a `production` profile plus confirmed event aliases, timing, event rules, runtime policy, and demand policy for that profile. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Demand parsing uses captured bounded bodies and never follows wrapper URLs. Output files are created once and never overwritten.
+The report command requires a `production` profile plus confirmed event aliases, timing, event rules, runtime policy, demand policy, and auction rules for that profile. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Demand parsing uses captured bounded bodies and never follows wrapper URLs. Output files are created once and never overwritten.
 
 Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
 
@@ -94,5 +96,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 13: validate auction precedence and fallback.
+The next implementation task is Task 25: validate visibility formation and viewability.
 
