@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–13, 22–25, and 29 are implemented:
+Tasks 01–08, 11–13, 22–26, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -23,9 +23,10 @@ Tasks 01–08, 11–13, 22–25, and 29 are implemented:
 - bounded VAST XML plus GAM, Prebid, and reseller response adapters with TC-9/10 initiation, no-fill, deadline, wrapper-chain, and first-gap classification;
 - versioned auction-cycle rules for configured parallel stages, waterfalls, dependency timeouts, required fallbacks, and refresh intervals, reported through TC-10 with the violated policy version and evidence;
 - bounded event-time and interval visibility samples with geometry, CSS ancestors, clipping, occlusion, transforms, and fixed/sticky transitions, plus TC-8/10/14 rules for formation and continuous exposure;
+- confirmed-policy click/scroll article transitions, main-frame full and same-document URL epochs, request-start strict URL attribution, per-article/tag loaded and Pageview counts, article-wide Website Pageview limits, and three-distinct-article coverage for TC-7/17/21/22/23;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
-Article lifecycle, device-matrix execution, and remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, or live viewability capture has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
+Device-matrix execution and remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, or confirmed article policy has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
 
 ## Requirements
 
@@ -58,10 +59,11 @@ pnpm report -- "https://approved.example/article" "config/profiles/production.js
   --runtime-policy "config/production-runtime-policy.json" `
   --demand-policy "config/production-demand-policy.json" `
   --auction-rules "config/production-auction-rules.json" `
-  --visibility-policy "config/production-visibility-policy.json"
+  --visibility-policy "config/production-visibility-policy.json" `
+  --article-policy "config/production-article-policy.json"
 ```
 
-The report command requires a `production` profile plus confirmed event aliases, timing, event rules, runtime policy, demand policy, auction rules, and visibility policy for that profile. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Demand parsing uses captured bounded bodies and never follows wrapper URLs. Visibility is sampled during the observation window and at logger-request time. Output files are created once and never overwritten.
+The report command requires a `production` profile plus confirmed event aliases, timing, event rules, runtime policy, demand policy, auction rules, visibility policy, and article policy for that profile. Article actions are limited to configured clicks or scrolls, must remain on the target origin, and wait for an exact expected URL. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Demand parsing uses captured bounded bodies and never follows wrapper URLs. Visibility is sampled during the observation window and at logger-request time. Output files are created once and never overwritten.
 
 Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
 
@@ -98,5 +100,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 26: validate article URLs and SPA lifecycle.
+The next implementation task is Task 27: execute the required device matrix.
 

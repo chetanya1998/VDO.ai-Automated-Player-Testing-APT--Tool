@@ -142,11 +142,12 @@ window.__VDO_SYNTHETIC_FIXTURE__=fixture;
 localStorage.setItem('fixture-run',fixture.id);
 document.cookie='fixture-run='+encodeURIComponent(fixture.id)+'; SameSite=Strict';
 const post=async(event)=>fetch('/logger.php?scenario='+encodeURIComponent(fixture.id),{method:'POST',headers:{'content-type':'application/json','x-fixture-timestamp':fixture.fixedTimestamp},body:fixture.loggerMode==='malformed'?'{not-json':JSON.stringify({event,tagName:fixture.tagName,domainName:'publisher.example',page_url:location.href,dep:'dependencies_fixture_1'})});
+if(fixture.articles.length>1){history.replaceState({},'',fixture.articles[0]);}
 for(const name of fixture.dependencies){await fetch('/dependencies/'+encodeURIComponent(name)+'?scenario='+encodeURIComponent(fixture.id));}
 for(const anchor of document.querySelectorAll('#'+CSS.escape(fixture.tagName))){anchor.dataset.syntheticPlayer='ready';anchor.textContent='Synthetic player ready';}
 for(const event of ${JSON.stringify(eventsFor(scenario))}){await post(event);}
 await fetch('/mock-demand?scenario='+encodeURIComponent(fixture.id));
-for(const button of document.querySelectorAll('[data-article-url]')){button.addEventListener('click',()=>history.pushState({},'',button.dataset.articleUrl));}
+for(const button of document.querySelectorAll('[data-article-url]')){button.addEventListener('click',async()=>{history.pushState({},'',button.dataset.articleUrl);await post('loaded');await post('Pageview');await post('Website Pageview');});}
 document.querySelector('#fixture-status').value='complete';})().catch((error)=>{console.error(error);document.querySelector('#fixture-status').value='error';});`;
 }
 

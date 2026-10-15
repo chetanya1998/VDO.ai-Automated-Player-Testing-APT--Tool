@@ -162,11 +162,18 @@ export class BrowserCapture {
       pageUrl: sanitizeUrl(page.url()),
       message: redactText(error.message),
     }));
+    page.on("framenavigated", (frame) => {
+      if (typeof page.mainFrame === "function" && frame !== page.mainFrame()) return;
+      this.#push("browser_dom", {
+        kind: "article_transition",
+        pageUrl: sanitizeUrl(frame.url()),
+        startedMs: this.#options.elapsedMs(),
+      });
+    });
   }
 
-  async capturePage(page: Page): Promise<void> {
-    if (this.#pageCaptured || this.#closed) return;
-    this.#pageCaptured = true;
+  async captureDom(page: Page): Promise<void> {
+    if (this.#closed) return;
     try {
       const [title, dom] = await Promise.all([
         page.title(),
@@ -187,6 +194,12 @@ export class BrowserCapture {
     } catch (error) {
       this.#gap("page_capture_unavailable", `DOM snapshot unavailable: ${redactText(error instanceof Error ? error.message : String(error))}`, null);
     }
+  }
+
+  async capturePage(page: Page): Promise<void> {
+    if (this.#pageCaptured || this.#closed) return;
+    this.#pageCaptured = true;
+    await this.captureDom(page);
 
     try {
       const image = await page.screenshot({ type: "jpeg", quality: 60, fullPage: false, timeout: this.#limits.settleTimeoutMs });
@@ -267,11 +280,13 @@ export class BrowserCapture {
     if (isLoggerRequest(request)) {
       const contentType = request.headers()["content-type"] ?? "";
       const body = extractAllowlistedLoggerFields(request.postData(), contentType);
+      const sourcePageUrl = typeof body.fields.page_url === "string" ? body.fields.page_url : null;
       this.#push("browser_logger", {
         kind: "logger_request",
         networkEvidenceId: evidence.evidenceId,
         url: sanitizeUrl(request.url()),
         requestStartPageUrl: sanitizeUrl(page.url()),
+        pageUrlStrictMatch: sourcePageUrl === null ? null : sourcePageUrl === page.url(),
         resourceType: request.resourceType(),
         parseState: body.parseState,
         fields: redactValue(body.fields),

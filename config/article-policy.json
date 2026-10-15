@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-three-article-lifecycle-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "urlComparison": "strict",
+  "minimumDistinctArticles": 3,
+  "revisit": "unknown",
+  "actions": [
+    {
+      "type": "click",
+      "selector": "[data-article-url='/articles/two']",
+      "expectedUrl": "https://publisher.example/articles/two",
+      "settleMs": 250
+    },
+    {
+      "type": "click",
+      "selector": "[data-article-url='/articles/three']",
+      "expectedUrl": "https://publisher.example/articles/three",
+      "settleMs": 250
+    }
+  ]
+}

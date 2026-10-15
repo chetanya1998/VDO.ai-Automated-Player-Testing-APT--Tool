@@ -1,6 +1,7 @@
 import { chromium, errors, type Browser, type LaunchOptions, type Page } from "playwright-core";
 import { BrowserCapture, type BrowserCaptureResult, type CaptureLimits } from "./capture.js";
 import { DOM_TRACKER_INIT_SCRIPT } from "./dom.js";
+import { performArticleActions, type ArticleAction } from "./articles.js";
 import {
   PRODUCTION_EGRESS_BOUNDARY,
   UrlPolicyError,
@@ -19,6 +20,7 @@ export interface BrowserRunOptions {
   visibilitySampleIntervalMs?: number;
   captureLimits?: Partial<CaptureLimits>;
   allowRemoteOrigins?: boolean;
+  articleActions?: readonly ArticleAction[];
 }
 
 export interface BrowserObservation {
@@ -111,7 +113,9 @@ function registerListeners(page: Page, observations: BrowserObservation[], start
     url: request.url(),
     detail: request.failure()?.errorText ?? "request failed",
   }));
-  page.on("framenavigated", (frame) => observations.push({ kind: "navigation", atMs: elapsed(started), url: frame.url() }));
+  page.on("framenavigated", (frame) => {
+    if (typeof page.mainFrame !== "function" || frame === page.mainFrame()) observations.push({ kind: "navigation", atMs: elapsed(started), url: frame.url() });
+  });
   page.on("console", (message) => observations.push({ kind: "console", atMs: elapsed(started), detail: `${message.type()}: ${message.text()}` }));
   page.on("pageerror", (error) => observations.push({ kind: "page_error", atMs: elapsed(started), detail: error.message }));
 }
@@ -184,6 +188,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
       const flow = (async () => {
         await page.goto(target.href, { waitUntil: "load", timeout: options.navigationTimeoutMs });
         await capture.captureVisibility(page, "after_load");
+        await capture.captureDom(page);
         let observedMs = 0;
         const observeAfterLoadMs = options.observeAfterLoadMs ?? 0;
         const sampleIntervalMs = options.visibilitySampleIntervalMs ?? 100;
@@ -193,6 +198,10 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
           observedMs += step;
           await capture.captureVisibility(page, "interval");
         }
+        await performArticleActions(page, options.articleActions ?? [], async () => {
+          await capture.captureDom(page!);
+          await capture.captureVisibility(page!, "after_load");
+        });
         await capture.capturePage(page);
         if (blockedUrls.length > 0) throw new UrlPolicyError(`blocked ${blockedUrls.length} request(s) outside the fixture origin`);
         const storage = await readStorage(page);

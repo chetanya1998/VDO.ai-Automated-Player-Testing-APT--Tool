@@ -132,6 +132,7 @@ test("logger capture keeps duplicate requests separate and persists only allowli
   assert.equal(network.length, 2);
   assert.notEqual(network[0]?.evidenceId, network[1]?.evidenceId);
   assert.equal(logger.length, 2);
+  assert.equal(logger[0]?.data.pageUrlStrictMatch, false);
   assert.deepEqual(Object.keys(logger[0]?.data.fields as object).sort(), ["dep", "domainName", "event", "page_url", "tagName"]);
   assert.equal(network[0]?.data.outcome, "http_success");
   assert.doesNotMatch(JSON.stringify(result), /SECRET_SENTINEL|private-query-value|private-session-value|private-response-value|authorization|cookie|extra/);

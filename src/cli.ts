@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { runBrowser } from "./browser/run.js";
-import { createQueuedRun, parseArticleEpoch, parseProfile, parseRun, type CheckResult, type Profile } from "./contracts.js";
+import { buildArticleEpochs, parseArticlePolicy } from "./browser/articles.js";
+import { createQueuedRun, parseProfile, parseRun, type CheckResult, type Profile } from "./contracts.js";
 import { normalizeEvidence } from "./evidence/normalize.js";
 import { parseEventAliasProfile } from "./logger/browser-payload.js";
 import type { Product, SiteTagProfile } from "./profile/tag-identity.js";
@@ -12,6 +13,7 @@ import { applyAuctionContext, parseAuctionPolicy, validateAuction } from "./rule
 import { applyDemandContext, parseDemandPolicy, validateDemand } from "./rules/demand.js";
 import { validateDependencies } from "./rules/dependencies.js";
 import { parseEventRulePolicy, validateEvents } from "./rules/events.js";
+import { validateArticles } from "./rules/articles.js";
 import { validateIntegration, type IntegrationExpectation } from "./rules/integration.js";
 import { validateLayout } from "./rules/layout.js";
 import { validateLoggerPresence } from "./rules/logger-presence.js";
@@ -30,6 +32,7 @@ interface ReportArguments {
   demandPolicyPath: string;
   auctionPolicyPath: string;
   visibilityPolicyPath: string;
+  articlePolicyPath: string;
   deviceId?: string;
   observeMs: number;
   timeoutMs: number;
@@ -65,7 +68,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 
 function reportArguments(args: string[]): ReportArguments {
   const [targetUrl, profilePath, outputPath] = args;
-  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
+  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> --article-policy <policy.json> [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
   const deviceId = option(args, "--device");
   return {
     targetUrl,
@@ -79,6 +82,7 @@ function reportArguments(args: string[]): ReportArguments {
     demandPolicyPath: nonempty(option(args, "--demand-policy"), "--demand-policy"),
     auctionPolicyPath: nonempty(option(args, "--auction-rules"), "--auction-rules"),
     visibilityPolicyPath: nonempty(option(args, "--visibility-policy"), "--visibility-policy"),
+    articlePolicyPath: nonempty(option(args, "--article-policy"), "--article-policy"),
     ...(deviceId === undefined ? {} : { deviceId }),
     observeMs: nonnegativeInteger(option(args, "--observe-ms", "5000"), "--observe-ms"),
     timeoutMs: positiveInteger(option(args, "--timeout-ms", "300000"), "--timeout-ms"),
@@ -132,16 +136,6 @@ function approvedOrigins(profile: Profile): string[] {
   ])];
 }
 
-function articleUrl(finalUrl: string | null, fallback: string): string {
-  if (finalUrl === null) return fallback;
-  try {
-    const parsed = new URL(finalUrl);
-    return parsed.protocol === "http:" || parsed.protocol === "https:" ? finalUrl : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function markExecutionUnverified(checks: readonly CheckResult[], reason: string): CheckResult[] {
   return checks.map((check) => ({
     ...check,
@@ -172,6 +166,9 @@ async function generateReport(args: string[]): Promise<void> {
   if (auctionPolicy.status !== "confirmed" || auctionPolicy.profileId !== profile.profileId) throw new TypeError("report requires confirmed auction rules for the selected profile");
   const visibilityPolicy = parseVisibilityPolicy(JSON.parse(await readFile(input.visibilityPolicyPath, "utf8")));
   if (visibilityPolicy.status !== "confirmed" || visibilityPolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed visibility policy for the selected profile");
+  const articlePolicy = parseArticlePolicy(JSON.parse(await readFile(input.articlePolicyPath, "utf8")));
+  if (articlePolicy.status !== "confirmed" || articlePolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed article policy for the selected profile");
+  if (articlePolicy.actions.some((action) => new URL(action.expectedUrl).origin !== new URL(input.targetUrl).origin)) throw new TypeError("article actions must stay on the approved target origin");
   const device = selectedDevice(profile, input.deviceId);
   const viewport = object(device.viewport, `profile.devices.${device.id}.viewport`);
   const expectation = integrationExpectation(rawProfile);
@@ -196,22 +193,23 @@ async function generateReport(args: string[]): Promise<void> {
     totalTimeoutMs: input.timeoutMs,
     observeAfterLoadMs: input.observeMs,
     visibilitySampleIntervalMs: visibilityPolicy.sampleIntervalMs,
+    articleActions: articlePolicy.actions,
   });
   const executionState = browser.status === "completed" ? "completed" : browser.status === "timed_out" ? "timed_out" : "errored";
   const run = parseRun({ ...queued, executionState });
-  const articleEpoch = parseArticleEpoch({
-    schemaVersion: 1,
-    articleEpochId: `${runId}-article-1`,
+  const articleEpochs = buildArticleEpochs({
     runId,
-    sequence: 0,
-    url: articleUrl(browser.metadata.finalUrl, input.targetUrl),
+    targetUrl: input.targetUrl,
     startedAt: browser.startedAt,
     endedAt: browser.endedAt,
+    capture: browser.capture.evidence,
+    revisit: articlePolicy.revisit,
   });
+  const articleEpoch = articleEpochs[0]!;
   const bundle = normalizeEvidence({
     run,
     capture: browser.capture,
-    articleEpochs: [articleEpoch],
+    articleEpochs,
     profile,
     eventAliases: aliases,
     physicalLoadId: `${runId}-load-1`,
@@ -228,6 +226,17 @@ async function generateReport(args: string[]): Promise<void> {
     deviceId: run.deviceId,
     articleEpochId: articleEpoch.articleEpochId,
     activeTags: [expectation.tagName],
+    captureComplete: browser.status === "completed" && browser.capture.complete,
+  });
+  const rawSite = object(object(rawProfile, "profile").site, "profile.site");
+  const articleChecks = validateArticles({
+    evidence: bundle.evidence,
+    articleEpochs,
+    articlePolicy,
+    eventPolicy: eventRules,
+    deviceId: run.deviceId,
+    activeTags: [expectation.tagName],
+    expectedDomainName: nonempty(rawSite.expectedDomainName, "profile.site.expectedDomainName"),
     captureComplete: browser.status === "completed" && browser.capture.complete,
   });
   const runtimeShared = {
@@ -259,7 +268,8 @@ async function generateReport(args: string[]): Promise<void> {
       loaderUrl: expectation.loaderUrl,
       captureComplete: browser.status === "completed" && browser.capture.complete,
     }),
-    ...applyDemandContext(applyRuntimeContext(applyVisibilityContext(eventChecks, viewability), blocked, dependencies), demand),
+    ...applyDemandContext(applyRuntimeContext(applyVisibilityContext(eventChecks.filter((check) => check.testCaseId !== "TC-7" && check.testCaseId !== "TC-22"), viewability), blocked, dependencies), demand),
+    ...articleChecks,
     viewability.tc8,
     blocked.check,
     dependencies,
@@ -301,7 +311,7 @@ async function main(): Promise<void> {
     }, null, 2));
     return;
   }
-  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json>");
+  throw new Error("usage: validate-profile <profile.json> | report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> --article-policy <policy.json>");
 }
 
 main().catch((error: unknown) => {

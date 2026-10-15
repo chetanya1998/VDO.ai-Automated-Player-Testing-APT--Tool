@@ -108,6 +108,7 @@ test("normalization preserves duplicates, timing, source, article scope, and sep
   assert.equal(logger?.data.sessionId, null);
   assert.equal(logger?.data.playerKey, "tag:v-example-site");
   assert.equal(logger?.articleEpochId, "article-one");
+  assert.equal(result.evidence.find((item) => item.evidenceId === "network-late")?.articleEpochId, "article-one", "a response completing near the next article keeps request-start scope");
 
   const players = result.evidence.filter((item) => item.evidenceId.startsWith("dom-two:player:"));
   assert.deepEqual(players.map((item) => item.data.playerKey), ["dom:v-one:1", "dom:v-two:2"]);
