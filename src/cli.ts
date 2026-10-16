@@ -20,6 +20,7 @@ import { validateLoggerPresence } from "./rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "./rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "./rules/viewability.js";
 import { parseDevicePolicy, parseRealDeviceEvidence, validateDevice } from "./rules/devices.js";
+import { parseRcaPolicy } from "./rca/diagnose.js";
 
 interface ReportArguments {
   targetUrl: string;
@@ -35,6 +36,7 @@ interface ReportArguments {
   visibilityPolicyPath: string;
   articlePolicyPath: string;
   devicePolicyPath: string;
+  rcaRulesPath: string;
   realDeviceEvidencePath?: string;
   deviceId?: string;
   observeMs: number;
@@ -71,7 +73,7 @@ function option(args: string[], name: string, fallback?: string): string | undef
 
 function reportArguments(args: string[]): ReportArguments {
   const [targetUrl, profilePath, outputPath] = args;
-  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> --article-policy <policy.json> --device-policy <policy.json> [--real-device-evidence <evidence.json>] [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
+  if (!targetUrl || !profilePath || !outputPath) throw new Error("usage: report <url> <profile.json> <output.json> --browser <executable> --aliases <aliases.json> --timing <timing.json> --event-rules <rules.json> --runtime-policy <policy.json> --demand-policy <policy.json> --auction-rules <rules.json> --visibility-policy <policy.json> --article-policy <policy.json> --device-policy <policy.json> --rca-rules <rules.json> [--real-device-evidence <evidence.json>] [--device <id>] [--observe-ms <ms>] [--timeout-ms <ms>]");
   const deviceId = option(args, "--device");
   const realDeviceEvidencePath = option(args, "--real-device-evidence");
   return {
@@ -88,6 +90,7 @@ function reportArguments(args: string[]): ReportArguments {
     visibilityPolicyPath: nonempty(option(args, "--visibility-policy"), "--visibility-policy"),
     articlePolicyPath: nonempty(option(args, "--article-policy"), "--article-policy"),
     devicePolicyPath: nonempty(option(args, "--device-policy"), "--device-policy"),
+    rcaRulesPath: nonempty(option(args, "--rca-rules"), "--rca-rules"),
     ...(realDeviceEvidencePath === undefined ? {} : { realDeviceEvidencePath }),
     ...(deviceId === undefined ? {} : { deviceId }),
     observeMs: nonnegativeInteger(option(args, "--observe-ms", "5000"), "--observe-ms"),
@@ -177,6 +180,8 @@ async function generateReport(args: string[]): Promise<DeterministicReport> {
   if (articlePolicy.actions.some((action) => new URL(action.expectedUrl).origin !== new URL(input.targetUrl).origin)) throw new TypeError("article actions must stay on the approved target origin");
   const devicePolicy = parseDevicePolicy(JSON.parse(await readFile(input.devicePolicyPath, "utf8")));
   if (devicePolicy.status !== "confirmed" || devicePolicy.profileId !== profile.profileId) throw new TypeError("report requires a confirmed device policy for the selected profile");
+  const rcaPolicy = parseRcaPolicy(JSON.parse(await readFile(input.rcaRulesPath, "utf8")));
+  if (rcaPolicy.status !== "confirmed" || rcaPolicy.profileId !== profile.profileId) throw new TypeError("report requires confirmed RCA rules for the selected profile");
   const device = selectedDevice(profile, input.deviceId);
   const deviceRule = devicePolicy.devices.find((item) => item.id === device.id);
   if (deviceRule === undefined) throw new TypeError(`device policy does not define ${device.id}`);
@@ -310,6 +315,7 @@ async function generateReport(args: string[]): Promise<DeterministicReport> {
     checks,
     captureComplete: browser.status === "completed" && browser.capture.complete,
     executionErrors: browser.errors,
+    rcaPolicy,
   });
   await mkdir(dirname(input.outputPath), { recursive: true });
   await writeFile(input.outputPath, `${JSON.stringify(report, null, 2)}\n`, { encoding: "utf8", flag: "wx" });

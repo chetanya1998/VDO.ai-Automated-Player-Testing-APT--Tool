@@ -1,6 +1,7 @@
 import { parseReport, VERDICTS, type CheckResult, type Evidence, type Report, type TestCaseId, type Verdict } from "../contracts.js";
 import type { BrowserRunError } from "../browser/run.js";
 import type { CoverageError, NormalizedEvidenceBundle } from "../evidence/normalize.js";
+import { diagnose, type Diagnosis, type RcaPolicy } from "../rca/diagnose.js";
 
 const ALL_CASES = Array.from({ length: 23 }, (_, index) => `TC-${index + 1}` as TestCaseId);
 
@@ -28,6 +29,7 @@ export interface DeterministicReport extends Report {
   incompleteChecks: IncompleteCheck[];
   executionErrors: BrowserRunError[];
   evidence: Evidence[];
+  diagnoses: Diagnosis[];
 }
 
 export interface BuildReportInput {
@@ -37,6 +39,7 @@ export interface BuildReportInput {
   checks: readonly CheckResult[];
   captureComplete: boolean;
   executionErrors: readonly BrowserRunError[];
+  rcaPolicy?: RcaPolicy;
 }
 
 function placeholder(bundle: NormalizedEvidenceBundle, testCaseId: TestCaseId): CheckResult {
@@ -87,6 +90,10 @@ export function buildReport(input: BuildReportInput): DeterministicReport {
     testCaseId: check.testCaseId,
     reason: unknownReason(check),
   }));
+  if (input.rcaPolicy !== undefined && (input.rcaPolicy.status !== "confirmed" || input.rcaPolicy.profileId !== input.bundle.run.profileId)) {
+    throw new TypeError("report RCA policy must be confirmed and match the run profile");
+  }
+  const diagnoses = input.rcaPolicy === undefined ? [] : diagnose(checks, input.bundle.evidence, input.rcaPolicy);
   const report: DeterministicReport = {
     schemaVersion: 2,
     reportId: input.reportId,
@@ -112,6 +119,7 @@ export function buildReport(input: BuildReportInput): DeterministicReport {
     incompleteChecks,
     executionErrors: [...input.executionErrors],
     evidence: input.bundle.evidence,
+    diagnoses,
   };
   parseReport(report);
   return report;

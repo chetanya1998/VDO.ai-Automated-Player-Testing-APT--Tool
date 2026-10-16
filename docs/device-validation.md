@@ -13,7 +13,8 @@ pnpm matrix -- "https://approved.example/article" "config/profiles/production.js
   --auction-rules "config/production-auction-rules.json" `
   --visibility-policy "config/production-visibility-policy.json" `
   --article-policy "config/production-article-policy.json" `
-  --device-policy "config/production-devices.json"
+  --device-policy "config/production-devices.json" `
+  --rca-rules "config/production-rca-rules.json"
 ```
 
 Chromium mobile emulation records the declared OS/browser profile, viewport, touch mode, consent, autoplay mode, CSS dimensions, block events, configured tap and playback after that tap. It does not verify Safari or real-iOS restrictions. TC-16 stays `UNKNOWN` when a confirmed policy requires real-iOS evidence and none is imported.
