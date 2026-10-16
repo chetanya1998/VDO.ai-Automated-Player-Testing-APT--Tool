@@ -229,6 +229,11 @@ export class BrowserCapture {
     }
   }
 
+  recordDeviceTap(page: Page, selector: string, outcome: "attempted" | "completed"): void {
+    if (this.#closed) return;
+    this.#push("browser_dom", { kind: "device_tap", pageUrl: sanitizeUrl(page.url()), selector: redactText(selector), outcome });
+  }
+
   async finalize(): Promise<BrowserCaptureResult> {
     if (this.#pending.size > 0) {
       let timer: NodeJS.Timeout | undefined;

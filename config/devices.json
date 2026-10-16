@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "policyId": "fixture-desktop-mobile-v1",
+  "profileId": "fixture-video-inline-v1",
+  "status": "draft",
+  "devices": [
+    {
+      "id": "desktop-chromium",
+      "kind": "desktop",
+      "os": "host",
+      "browser": "chromium",
+      "viewport": { "width": 1440, "height": 900 },
+      "emulated": false,
+      "consent": "granted",
+      "autoplayMode": "muted",
+      "requiredBlockEvents": [],
+      "tap": { "state": "disabled", "selector": null, "settleMs": 0, "playbackRequired": false },
+      "realIosEvidence": "not_applicable"
+    },
+    {
+      "id": "mobile-chromium-emulated",
+      "kind": "mobile",
+      "os": "android-compatible-emulation",
+      "browser": "chromium",
+      "viewport": { "width": 390, "height": 844 },
+      "emulated": true,
+      "consent": "granted",
+      "autoplayMode": "muted",
+      "requiredBlockEvents": ["blocked_inline", "blocked_autoplay", "blocked_device"],
+      "tap": { "state": "enabled", "selector": "[data-player-tap]", "settleMs": 500, "playbackRequired": true },
+      "realIosEvidence": "required"
+    }
+  ],
+  "deferred": ["tablet", "ctv"]
+}

@@ -101,6 +101,7 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
             resolve();
           }, milliseconds));
         },
+        locator: (_selector: string) => ({ click: async () => undefined }),
         async evaluate(pageFunction: unknown, argument?: unknown) {
           if (typeof argument === "object" && argument !== null && "reason" in argument) return {
             sampledMs: 10, reason: "interval", triggerNetworkEvidenceId: null, triggerEvent: null,
@@ -210,6 +211,15 @@ test("bounded fixture browser execution", async (suite) => {
     const navigations = result.observations.filter((event) => event.kind === "navigation");
     assert.equal(result.status, "completed");
     assert.ok(navigations.some((event) => event.url === `${fixture.origin}/articles/two`));
+  });
+
+  await suite.test("a configured mobile tap is recorded without claiming real-device fidelity", async () => {
+    const result = await createBrowserRunner(fakeBrowserDependencies().dependencies)(options(fixture.origin, fixture.scenarioUrl("healthy-inline-video"), {
+      deviceEmulation: { isMobile: true, hasTouch: true },
+      deviceTap: { selector: "[data-player-tap]", settleMs: 0 },
+    }));
+    assert.equal(result.status, "completed");
+    assert.ok(result.capture.evidence.some((item) => item.source === "browser_dom" && item.data.kind === "device_tap" && item.data.outcome === "completed"));
   });
 
   await suite.test("an internal exception still closes its context and browser", async () => {

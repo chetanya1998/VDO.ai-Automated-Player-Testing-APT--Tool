@@ -21,6 +21,8 @@ export interface BrowserRunOptions {
   captureLimits?: Partial<CaptureLimits>;
   allowRemoteOrigins?: boolean;
   articleActions?: readonly ArticleAction[];
+  deviceEmulation?: { isMobile: boolean; hasTouch: boolean };
+  deviceTap?: { selector: string; settleMs: number };
 }
 
 export interface BrowserObservation {
@@ -167,7 +169,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
         timeout: options.totalTimeoutMs,
       });
       browserVersion = browser.version();
-      context = await browser.newContext({ viewport: options.viewport, serviceWorkers: "block" });
+      context = await browser.newContext({ viewport: options.viewport, serviceWorkers: "block", ...(options.deviceEmulation ?? {}) });
       await context.addInitScript(`globalThis.__vdoInitialStorage={cookie:document.cookie,localStorageKeys:Object.keys(localStorage).sort()}`);
       await context.addInitScript(DOM_TRACKER_INIT_SCRIPT);
       await context.route("**/*", async (route) => {
@@ -197,6 +199,13 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
           await page.waitForTimeout(step);
           observedMs += step;
           await capture.captureVisibility(page, "interval");
+        }
+        if (options.deviceTap !== undefined) {
+          capture.recordDeviceTap(page, options.deviceTap.selector, "attempted");
+          await page.locator(options.deviceTap.selector).click();
+          capture.recordDeviceTap(page, options.deviceTap.selector, "completed");
+          if (options.deviceTap.settleMs > 0) await page.waitForTimeout(options.deviceTap.settleMs);
+          await capture.captureVisibility(page, "after_load");
         }
         await performArticleActions(page, options.articleActions ?? [], async () => {
           await capture.captureDom(page!);
