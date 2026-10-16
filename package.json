@@ -12,10 +12,15 @@
     "test": "tsc -p tsconfig.json && node --test --test-isolation=none dist/tests/*.test.js",
     "report": "tsc -p tsconfig.json && node dist/src/cli.js report",
     "matrix": "tsc -p tsconfig.json && node dist/src/cli.js matrix",
+    "db:migrate": "tsc -p tsconfig.json && node dist/src/db/migrate.js",
     "validate:fixture-profile": "tsc -p tsconfig.json && node dist/src/cli.js validate-profile config/profiles/fixture-video-inline-v1.json"
+  },
+  "dependencies": {
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
+    "@types/pg": "^8.23.1",
     "playwright-core": "1.62.1",
     "typescript": "7.0.2"
   }

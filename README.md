@@ -26,6 +26,7 @@ Tasks 01–08, 11–14, 22–27, and 29 are implemented:
 - confirmed-policy click/scroll article transitions, main-frame full and same-document URL epochs, request-start strict URL attribution, per-article/tag loaded and Pageview counts, article-wide Website Pageview limits, and three-distinct-article coverage for TC-7/17/21/22/23;
 - sequential named desktop/mobile matrix execution with viewport and CSS measurements, touch emulation, recorded playback taps, TC-16 block coverage, explicit real-iOS gaps, and attributable iOS/Safari evidence import;
 - deterministic RCA ranking that groups dependent symptoms under the earliest supported failure, retains independent demand/configuration findings, cites every cause, and separates confidence, category, owner suggestion, and next checks;
+- a real PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references; database acceptance remains pending until a disposable PostgreSQL URL is supplied;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -35,6 +36,7 @@ Remaining product verdict rules are still pending. No approved production profil
 - Node.js 24 or newer
 - pnpm
 - A Chromium-based browser for the optional live smoke test
+- PostgreSQL for Task 15 migration and queue integration tests
 
 ## Setup
 
@@ -43,6 +45,8 @@ pnpm install
 pnpm typecheck
 pnpm test
 ```
+
+Apply the PostgreSQL migration with `DATABASE_URL`, or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
 
 Validate the fixture profile:
 
@@ -92,6 +96,9 @@ src/rules/              Deterministic evidence-backed validator rules
 src/rca/                Evidence-backed probable-cause ranking
 src/contracts.ts        Runtime-validated shared contracts
 src/report/             Versioned deterministic report assembly
+src/store.ts             PostgreSQL run, evidence and queue persistence
+src/worker.ts            Single-job leased worker
+db/migrations/           Versioned PostgreSQL schema
 src/cli.ts              Profile validation and real-page report CLI
 tests/fixtures/         Synthetic publisher pages and deterministic local endpoints
 tests/                   Contract, fixture, and runner checks
@@ -107,5 +114,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-The next implementation task is Task 15: persist runs and process jobs.
+Task 15 implementation is ready, but its real PostgreSQL acceptance checks remain blocked until `TEST_DATABASE_URL` is provided. Task 16 follows after that verification.
 
