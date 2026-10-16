@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–15, 22–27, and 29 are implemented:
+Tasks 01–08, 11–16, 22–27, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -27,6 +27,7 @@ Tasks 01–08, 11–15, 22–27, and 29 are implemented:
 - sequential named desktop/mobile matrix execution with viewport and CSS measurements, touch emulation, recorded playback taps, TC-16 block coverage, explicit real-iOS gaps, and attributable iOS/Safari evidence import;
 - deterministic RCA ranking that groups dependent symptoms under the earliest supported failure, retains independent demand/configuration findings, cites every cause, and separates confidence, category, owner suggestion, and next checks;
 - a verified PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references;
+- a loopback-only authenticated run API with team-scoped create, list, status, report and artifact access plus persisted idempotency;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -47,6 +48,8 @@ pnpm test
 ```
 
 Copy your local PostgreSQL connection strings into ignored `.env.local`, export them into the process, then apply the migration with `DATABASE_URL` or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
+
+Start the authenticated local API with `pnpm api` after setting `DATABASE_URL` and `VDO_VALIDATOR_API_IDENTITIES`. See [Local authenticated run API](docs/api.md).
 
 Validate the fixture profile:
 
@@ -106,7 +109,7 @@ tests/                   Contract, fixture, and runner checks
 
 ## Safety boundary
 
-The runner installs a browser-context route before navigation and permits only origins explicitly named by the selected profile. Remote runs require a production profile. Unrestricted remote execution is disabled; WebSocket controls, DNS controls, authentication, and deployment network policy remain scheduled for Task 20.
+The runner installs a browser-context route before navigation and permits only origins explicitly named by the selected profile. Remote runs require a production profile. Unrestricted remote execution is disabled; WebSocket controls, DNS controls and deployment network policy remain scheduled for Task 20.
 
 The synthetic fixtures never contact live advertising demand. They are development inputs, not publisher conformance evidence.
 
@@ -114,5 +117,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-Task 15 is complete and verified against PostgreSQL 17.11. Task 16, the authenticated run API, is next.
+Task 16 is complete and verified through real local HTTP and PostgreSQL. Task 17, the dashboard and event timeline, is next.
 

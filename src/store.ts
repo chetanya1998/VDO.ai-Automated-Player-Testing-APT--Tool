@@ -19,6 +19,43 @@ export interface EnqueueRunInput {
   profileSnapshot: JsonValue;
   targetUrl: string;
   deviceId: string;
+  teamId?: string;
+  userId?: string;
+  idempotencyKey?: string;
+  submissionHash?: string;
+}
+
+export interface EnqueueRunResult {
+  runId: string;
+  created: boolean;
+  createdAt: string;
+  deadlineAt: string;
+}
+
+export interface RunSummary {
+  runId: string;
+  targetUrl: string;
+  deviceId: string;
+  executionState: string;
+  createdAt: string;
+  deadlineAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  progress: JsonValue;
+}
+
+export interface TeamReport {
+  runId: string;
+  executionState: string;
+  report: ReportSnapshot | null;
+}
+
+export interface TeamArtifact {
+  artifactId: string;
+  kind: string;
+  storageRef: string;
+  byteSize: number;
+  sha256: string;
 }
 
 export interface ClaimedJob {
@@ -87,6 +124,13 @@ export class QueueCapacityError extends Error {
   constructor(capacity: number) {
     super(`validator queue capacity ${capacity} reached`);
     this.name = "QueueCapacityError";
+  }
+}
+
+export class IdempotencyConflictError extends Error {
+  constructor() {
+    super("idempotency key was already used for a different submission");
+    this.name = "IdempotencyConflictError";
   }
 }
 
@@ -159,9 +203,34 @@ export class PostgresStore {
     };
   }
 
-  async enqueueRun(input: EnqueueRunInput): Promise<{ createdAt: string; deadlineAt: string }> {
+  async enqueueRun(input: EnqueueRunInput): Promise<EnqueueRunResult> {
     return transaction(this.pool, async (client) => {
+      const teamId = input.teamId ?? "system";
+      const userId = input.userId ?? "system";
+      if (teamId.trim() === "" || userId.trim() === "") throw new TypeError("teamId and userId are required");
+      if ((input.idempotencyKey === undefined) !== (input.submissionHash === undefined)) {
+        throw new TypeError("idempotencyKey and submissionHash must be provided together");
+      }
       await client.query("SELECT pg_advisory_xact_lock(867530902)");
+      if (input.idempotencyKey !== undefined) {
+        if (input.idempotencyKey.trim() === "" || Buffer.byteLength(input.idempotencyKey, "utf8") > 200) {
+          throw new TypeError("idempotencyKey must contain 1 to 200 bytes");
+        }
+        const prior = await client.query<{ run_id: string; submission_hash: string; created_at: Date; deadline_at: Date }>(
+          `SELECT run_id, submission_hash, created_at, deadline_at FROM validator_runs
+           WHERE team_id = $1 AND idempotency_key = $2`,
+          [teamId, input.idempotencyKey],
+        );
+        if (prior.rows[0] !== undefined) {
+          if (prior.rows[0].submission_hash !== input.submissionHash) throw new IdempotencyConflictError();
+          return {
+            runId: prior.rows[0].run_id,
+            created: false,
+            createdAt: instant(prior.rows[0].created_at),
+            deadlineAt: instant(prior.rows[0].deadline_at),
+          };
+        }
+      }
       const active = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM validator_jobs WHERE state IN ('queued', 'leased')");
       if (Number(active.rows[0]?.count ?? 0) >= this.options.capacity) throw new QueueCapacityError(this.options.capacity);
       await client.query(
@@ -176,20 +245,85 @@ export class PostgresStore {
       if (profile.rows[0]?.profile_hash !== input.profileHash) throw new Error("profile version is immutable and its hash does not match");
       const run = await client.query<{ created_at: Date; deadline_at: Date }>(
         `INSERT INTO validator_runs (
-           run_id, profile_id, profile_version, target_url, device_id, deadline_at, retention_until
+           run_id, profile_id, profile_version, target_url, device_id, deadline_at, retention_until,
+           team_id, user_id, idempotency_key, submission_hash
          ) VALUES (
            $1, $2, $3, $4, $5,
            clock_timestamp() + ($6 * interval '1 millisecond'),
-           clock_timestamp() + ($7 * interval '1 millisecond')
+           clock_timestamp() + ($7 * interval '1 millisecond'),
+           $8, $9, $10, $11
          ) RETURNING created_at, deadline_at`,
-        [input.runId, input.profileId, input.profileVersion, input.targetUrl, input.deviceId, this.options.runDeadlineMs, this.options.retentionMs],
+        [
+          input.runId, input.profileId, input.profileVersion, input.targetUrl, input.deviceId,
+          this.options.runDeadlineMs, this.options.retentionMs, teamId, userId,
+          input.idempotencyKey ?? null, input.submissionHash ?? null,
+        ],
       );
       await client.query(
         "INSERT INTO validator_jobs (run_id, deadline_at) SELECT run_id, deadline_at FROM validator_runs WHERE run_id = $1",
         [input.runId],
       );
-      return { createdAt: instant(run.rows[0]!.created_at), deadlineAt: instant(run.rows[0]!.deadline_at) };
+      return {
+        runId: input.runId,
+        created: true,
+        createdAt: instant(run.rows[0]!.created_at),
+        deadlineAt: instant(run.rows[0]!.deadline_at),
+      };
     });
+  }
+
+  async getRunSummary(teamId: string, runId: string): Promise<RunSummary | null> {
+    const result = await this.pool.query<{
+      run_id: string; target_url: string; device_id: string; execution_state: string;
+      created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null; progress: JsonValue;
+    }>(
+      `SELECT run_id, target_url, device_id, execution_state, created_at, deadline_at, started_at, ended_at, progress
+       FROM validator_runs WHERE team_id = $1 AND run_id = $2`,
+      [teamId, runId],
+    );
+    return result.rows[0] === undefined ? null : this.runSummary(result.rows[0]);
+  }
+
+  async listRuns(teamId: string): Promise<RunSummary[]> {
+    // shortcut: return the newest 100 runs until the dashboard needs cursor pagination.
+    const result = await this.pool.query<{
+      run_id: string; target_url: string; device_id: string; execution_state: string;
+      created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null; progress: JsonValue;
+    }>(
+      `SELECT run_id, target_url, device_id, execution_state, created_at, deadline_at, started_at, ended_at, progress
+       FROM validator_runs WHERE team_id = $1 ORDER BY created_at DESC, run_id LIMIT 100`,
+      [teamId],
+    );
+    return result.rows.map((row) => this.runSummary(row));
+  }
+
+  async getReportForTeam(teamId: string, runId: string): Promise<TeamReport | null> {
+    const result = await this.pool.query<{ run_id: string; execution_state: string; final_report: ReportSnapshot | null }>(
+      "SELECT run_id, execution_state, final_report FROM validator_runs WHERE team_id = $1 AND run_id = $2",
+      [teamId, runId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : { runId: row.run_id, executionState: row.execution_state, report: row.final_report };
+  }
+
+  async getArtifactForTeam(teamId: string, artifactId: string): Promise<TeamArtifact | null> {
+    const result = await this.pool.query<{
+      artifact_id: string; kind: string; storage_ref: string; byte_size: string; sha256: string;
+    }>(
+      `SELECT artifacts.artifact_id, artifacts.kind, artifacts.storage_ref, artifacts.byte_size::text, artifacts.sha256
+       FROM validator_artifact_refs AS artifacts
+       JOIN validator_runs AS runs ON runs.run_id = artifacts.run_id
+       WHERE runs.team_id = $1 AND artifacts.artifact_id = $2`,
+      [teamId, artifactId],
+    );
+    const row = result.rows[0];
+    return row === undefined ? null : {
+      artifactId: row.artifact_id,
+      kind: row.kind,
+      storageRef: row.storage_ref,
+      byteSize: Number(row.byte_size),
+      sha256: row.sha256,
+    };
   }
 
   async expireInterrupted(now = new Date()): Promise<string[]> {
@@ -417,5 +551,22 @@ export class PostgresStore {
       [runId, workerId],
     );
     if (result.rowCount !== 1) throw new Error("active job lease is required");
+  }
+
+  private runSummary(row: {
+    run_id: string; target_url: string; device_id: string; execution_state: string;
+    created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null; progress: JsonValue;
+  }): RunSummary {
+    return {
+      runId: row.run_id,
+      targetUrl: row.target_url,
+      deviceId: row.device_id,
+      executionState: row.execution_state,
+      createdAt: instant(row.created_at),
+      deadlineAt: instant(row.deadline_at),
+      startedAt: row.started_at === null ? null : instant(row.started_at),
+      endedAt: row.ended_at === null ? null : instant(row.ended_at),
+      progress: row.progress,
+    };
   }
 }

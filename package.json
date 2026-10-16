@@ -13,6 +13,7 @@
     "report": "tsc -p tsconfig.json && node dist/src/cli.js report",
     "matrix": "tsc -p tsconfig.json && node dist/src/cli.js matrix",
     "db:migrate": "tsc -p tsconfig.json && node dist/src/db/migrate.js",
+    "api": "tsc -p tsconfig.json && node dist/src/api/server.js",
     "validate:fixture-profile": "tsc -p tsconfig.json && node dist/src/cli.js validate-profile config/profiles/fixture-video-inline-v1.json"
   },
   "dependencies": {
