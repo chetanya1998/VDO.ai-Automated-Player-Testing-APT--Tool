@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–14, 22–27, and 29 are implemented:
+Tasks 01–08, 11–15, 22–27, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -26,7 +26,7 @@ Tasks 01–08, 11–14, 22–27, and 29 are implemented:
 - confirmed-policy click/scroll article transitions, main-frame full and same-document URL epochs, request-start strict URL attribution, per-article/tag loaded and Pageview counts, article-wide Website Pageview limits, and three-distinct-article coverage for TC-7/17/21/22/23;
 - sequential named desktop/mobile matrix execution with viewport and CSS measurements, touch emulation, recorded playback taps, TC-16 block coverage, explicit real-iOS gaps, and attributable iOS/Safari evidence import;
 - deterministic RCA ranking that groups dependent symptoms under the earliest supported failure, retains independent demand/configuration findings, cites every cause, and separates confidence, category, owner suggestion, and next checks;
-- a real PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references; database acceptance remains pending until a disposable PostgreSQL URL is supplied;
+- a verified PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -46,7 +46,7 @@ pnpm typecheck
 pnpm test
 ```
 
-Apply the PostgreSQL migration with `DATABASE_URL`, or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
+Copy your local PostgreSQL connection strings into ignored `.env.local`, export them into the process, then apply the migration with `DATABASE_URL` or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
 
 Validate the fixture profile:
 
@@ -114,5 +114,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-Task 15 implementation is ready, but its real PostgreSQL acceptance checks remain blocked until `TEST_DATABASE_URL` is provided. Task 16 follows after that verification.
+Task 15 is complete and verified against PostgreSQL 17.11. Task 16, the authenticated run API, is next.
 

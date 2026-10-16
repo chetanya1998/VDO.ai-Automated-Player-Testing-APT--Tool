@@ -9,6 +9,23 @@ $env:DATABASE_URL = "postgresql://validator@localhost/player_validator"
 pnpm db:migrate
 ```
 
+For local development, keep the URLs in the gitignored `.env.local` file:
+
+```text
+DATABASE_URL=postgresql://validator:password@127.0.0.1:5432/player_validator
+TEST_DATABASE_URL=postgresql://validator:password@127.0.0.1:5432/player_validator_test
+```
+
+Load that file into the current PowerShell process before running migrations or tests:
+
+```powershell
+Get-Content .env.local | ForEach-Object {
+  if ($_ -match '^([^=]+)=(.*)$') {
+    [Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+  }
+}
+```
+
 The migrator serializes concurrent migration attempts and rejects any migration file changed after application. A run is admitted only while queued plus leased jobs remain below the configured capacity. Its maximum 300-second deadline starts when the run is inserted, so queue time is included.
 
 `ValidatorWorker.runOnce()` owns one job at a time. PostgreSQL claims jobs with `FOR UPDATE SKIP LOCKED`, records a bounded lease and extends it while the handler runs. An expired lease or run deadline makes the job terminally interrupted; it is never returned to the queue because repeating browser ad activity requires a new run ID. Progress, partial report snapshots, evidence metadata and artifact references written before interruption remain available.
