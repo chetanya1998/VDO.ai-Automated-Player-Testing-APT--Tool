@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–18 and 22–29 are implemented:
+Tasks 01–19 and 22–29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -33,6 +33,7 @@ Tasks 01–18 and 22–29 are implemented:
 - authenticated bounded URL/device batches with persisted mixed admission results, independent run deadlines, explicit retries, per-item report links and aggregate case/device completeness;
 - an optional deadline-bounded backend logger client with scoped bearer authentication, cursor pagination, rate-limit handling and ingestion watermark metadata; live access and correlation remain unverified;
 - exact, ambiguous and unmatched browser/backend correlation using confirmed shared-ID mappings, with timing proximity excluded from identity proof and unresolved identity blocking high-confidence backend RCA;
+- opt-in bounded AI explanations over redacted findings and selected evidence, with approved-model enforcement, cited evidence validation and deterministic fallback that cannot change verdicts;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -85,6 +86,8 @@ Run both enabled desktop and mobile profiles with `pnpm matrix --` using the sam
 
 After collecting the agreed QA-labeled corpus, calculate the pilot metrics and release gates with `pnpm pilot:evaluate -- observations.json results.json`. See [Pilot release results](docs/pilot-results.md) and [Pilot support runbook](docs/support-runbook.md). The current corpus is empty, so no accuracy, latency or release claim is made.
 
+AI explanations are optional and require an explicitly approved provider policy, credential and user request. See [Optional AI explanations](docs/ai-explanations.md). No production model configuration is committed.
+
 Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
 
 ```powershell
@@ -100,6 +103,7 @@ docs/                   Integration contract and implementation plan
 src/browser/            Bounded browser runner, evidence capture, and URL policy
 src/evidence/           Deterministic capture normalization
 src/evidence/correlate.ts Verified shared-ID browser/backend correlation
+src/ai/                Optional bounded explanation provider integration
 src/logger/             Five-field browser logger payload parsing
 src/logger/client.ts    Optional bounded backend logger collection
 src/profile.ts          Deterministic profile snapshots
