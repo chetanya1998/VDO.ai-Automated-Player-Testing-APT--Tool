@@ -81,6 +81,8 @@ The report command requires a `production` profile plus confirmed event aliases,
 
 Run both enabled desktop and mobile profiles with `pnpm matrix --` using the same options and an output directory in place of the report file. It creates one complete TC-1 through TC-23 report per device and `matrix.json`. See [desktop, mobile and real-iOS validation](docs/device-validation.md) for the hardware evidence procedure and `--real-device-evidence` format.
 
+After collecting the agreed QA-labeled corpus, calculate the pilot metrics and release gates with `pnpm pilot:evaluate -- observations.json results.json`. See [Pilot release results](docs/pilot-results.md) and [Pilot support runbook](docs/support-runbook.md). The current corpus is empty, so no accuracy, latency or release claim is made.
+
 Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
 
 ```powershell
@@ -102,6 +104,7 @@ src/rules/              Deterministic evidence-backed validator rules
 src/rca/                Evidence-backed probable-cause ranking
 src/contracts.ts        Runtime-validated shared contracts
 src/report/             Versioned deterministic report assembly
+src/pilot/              Pilot metrics and release-gate evaluation
 src/store.ts             PostgreSQL run, evidence and queue persistence
 src/worker.ts            Single-job leased worker
 web/                     Responsive run dashboard and evidence timeline
@@ -121,5 +124,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-Task 28 is complete and verified through dashboard rendering plus authenticated HTTP and PostgreSQL acceptance. Task 20, internal-pilot hardening and deployment controls, is next.
+Task 21 measurement tooling and its mandatory CASES manifest are implemented, but the release decision is blocked by the missing labeled corpus, confirmed decisions and Task 20 deployment acceptance.
 
