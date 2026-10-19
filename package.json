@@ -7,21 +7,28 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.json && node --test --test-isolation=none dist/tests/*.test.js",
+    "build": "tsc -p tsconfig.json && pnpm typecheck:web && pnpm build:web",
+    "build:web": "node scripts/build-web.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm typecheck:web",
+    "typecheck:web": "tsc -p web/tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && pnpm typecheck:web && pnpm build:web && node --test --test-isolation=none dist/tests/*.test.js",
     "report": "tsc -p tsconfig.json && node dist/src/cli.js report",
     "matrix": "tsc -p tsconfig.json && node dist/src/cli.js matrix",
     "db:migrate": "tsc -p tsconfig.json && node dist/src/db/migrate.js",
-    "api": "tsc -p tsconfig.json && node dist/src/api/server.js",
+    "api": "pnpm build:web && tsc -p tsconfig.json && node dist/src/api/server.js",
     "validate:fixture-profile": "tsc -p tsconfig.json && node dist/src/cli.js validate-profile config/profiles/fixture-video-inline-v1.json"
   },
   "dependencies": {
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
     "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "esbuild-wasm": "^0.28.2",
     "playwright-core": "1.62.1",
     "typescript": "7.0.2"
   }

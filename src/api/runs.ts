@@ -8,6 +8,7 @@ import type { JsonValue } from "../contracts.js";
 import { snapshotProfile } from "../profile.js";
 import { IdempotencyConflictError, PostgresStore, QueueCapacityError } from "../store.js";
 import type { ApiIdentity } from "./auth.js";
+import { serveDashboard } from "./static.js";
 
 const MAX_BODY_BYTES = 1_048_576;
 
@@ -17,9 +18,10 @@ class ApiError extends Error {
   }
 }
 
-interface RunApiOptions {
+export interface RunApiOptions {
   store: PostgresStore;
   authenticate(request: IncomingMessage): ApiIdentity | null;
+  dashboardRoot?: string;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -131,6 +133,7 @@ async function createRun(request: IncomingMessage, response: ServerResponse, ide
 
 async function handle(request: IncomingMessage, response: ServerResponse, options: RunApiOptions): Promise<void> {
   response.setHeader("x-content-type-options", "nosniff");
+  if (options.dashboardRoot !== undefined && await serveDashboard(request, response, options.dashboardRoot)) return;
   const identity = options.authenticate(request);
   if (identity === null) {
     response.setHeader("www-authenticate", "Bearer");

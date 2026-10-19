@@ -52,6 +52,7 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const store = new PostgresStore(pool, { capacity: 1, leaseMs: 5_000, runDeadlineMs: 20_000, retentionMs: 10_000 });
     server = createRunApiServer({
       store,
+      dashboardRoot: process.cwd(),
       authenticate: createBearerAuthenticator([
         { token: teamAToken, userId: "alice", teamId: "team-a" },
         { token: teamBToken, userId: "bob", teamId: "team-b" },
@@ -62,6 +63,10 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const targetOne = `${base}/fixture/one`;
     const targetTwo = `${base}/fixture/two`;
     const fixtureProfile = profile([targetOne, targetTwo]);
+
+    const dashboard = await fetch(base);
+    assert.equal(dashboard.status, 200);
+    assert.match(await dashboard.text(), /VDO\.AI Player Validator/);
 
     const unauthorized = await fetch(`${base}/v1/runs`);
     assert.equal(unauthorized.status, 401);

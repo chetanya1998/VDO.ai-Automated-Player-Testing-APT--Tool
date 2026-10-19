@@ -44,10 +44,17 @@ export interface RunSummary {
   progress: JsonValue;
 }
 
+export interface RunDetail extends RunSummary {
+  partialReport: ReportSnapshot | null;
+}
+
 export interface TeamReport {
   runId: string;
   executionState: string;
   report: ReportSnapshot | null;
+  evidence: EvidenceMetadataInput[];
+  findings: FindingInput[];
+  artifacts: Array<Omit<ArtifactReferenceInput, "storageRef">>;
 }
 
 export interface TeamArtifact {
@@ -272,16 +279,19 @@ export class PostgresStore {
     });
   }
 
-  async getRunSummary(teamId: string, runId: string): Promise<RunSummary | null> {
+  async getRunSummary(teamId: string, runId: string): Promise<RunDetail | null> {
     const result = await this.pool.query<{
       run_id: string; target_url: string; device_id: string; execution_state: string;
-      created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null; progress: JsonValue;
+      created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null;
+      progress: JsonValue; partial_report: ReportSnapshot | null;
     }>(
-      `SELECT run_id, target_url, device_id, execution_state, created_at, deadline_at, started_at, ended_at, progress
+      `SELECT run_id, target_url, device_id, execution_state, created_at, deadline_at, started_at, ended_at,
+              progress, partial_report
        FROM validator_runs WHERE team_id = $1 AND run_id = $2`,
       [teamId, runId],
     );
-    return result.rows[0] === undefined ? null : this.runSummary(result.rows[0]);
+    const row = result.rows[0];
+    return row === undefined ? null : { ...this.runSummary(row), partialReport: row.partial_report };
   }
 
   async listRuns(teamId: string): Promise<RunSummary[]> {
@@ -298,12 +308,62 @@ export class PostgresStore {
   }
 
   async getReportForTeam(teamId: string, runId: string): Promise<TeamReport | null> {
-    const result = await this.pool.query<{ run_id: string; execution_state: string; final_report: ReportSnapshot | null }>(
+    const run = await this.pool.query<{ run_id: string; execution_state: string; final_report: ReportSnapshot | null }>(
       "SELECT run_id, execution_state, final_report FROM validator_runs WHERE team_id = $1 AND run_id = $2",
       [teamId, runId],
     );
-    const row = result.rows[0];
-    return row === undefined ? null : { runId: row.run_id, executionState: row.execution_state, report: row.final_report };
+    const row = run.rows[0];
+    if (row === undefined) return null;
+    const [evidence, findings, artifacts] = await Promise.all([
+      this.pool.query<{
+        evidence_id: string; article_epoch_id: string; device_id: string; source: string;
+        captured_at: Date; metadata: { [key: string]: JsonValue };
+      }>(
+        `SELECT evidence_id, article_epoch_id, device_id, source, captured_at, metadata
+         FROM validator_evidence_metadata WHERE run_id = $1 ORDER BY captured_at, evidence_id`,
+        [runId],
+      ),
+      this.pool.query<{
+        finding_id: string; kind: "check" | "diagnosis"; category: string;
+        verdict: string; evidence_ids: string[]; payload: JsonValue;
+      }>(
+        `SELECT finding_id, kind, category, verdict, evidence_ids, payload
+         FROM validator_findings WHERE run_id = $1 ORDER BY finding_id`,
+        [runId],
+      ),
+      this.pool.query<{ artifact_id: string; kind: string; byte_size: string; sha256: string }>(
+        `SELECT artifact_id, kind, byte_size::text, sha256
+         FROM validator_artifact_refs WHERE run_id = $1 ORDER BY artifact_id`,
+        [runId],
+      ),
+    ]);
+    return {
+      runId: row.run_id,
+      executionState: row.execution_state,
+      report: row.final_report,
+      evidence: evidence.rows.map((item) => ({
+        evidenceId: item.evidence_id,
+        articleEpochId: item.article_epoch_id,
+        deviceId: item.device_id,
+        source: item.source,
+        capturedAt: instant(item.captured_at),
+        metadata: item.metadata,
+      })),
+      findings: findings.rows.map((item) => ({
+        findingId: item.finding_id,
+        kind: item.kind,
+        category: item.category,
+        verdict: item.verdict,
+        evidenceIds: item.evidence_ids,
+        payload: item.payload,
+      })),
+      artifacts: artifacts.rows.map((item) => ({
+        artifactId: item.artifact_id,
+        kind: item.kind,
+        byteSize: Number(item.byte_size),
+        sha256: item.sha256,
+      })),
+    };
   }
 
   async getArtifactForTeam(teamId: string, artifactId: string): Promise<TeamArtifact | null> {

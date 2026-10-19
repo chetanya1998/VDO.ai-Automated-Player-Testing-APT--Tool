@@ -10,7 +10,7 @@ $env:VDO_VALIDATOR_API_IDENTITIES = '[{"token":"replace-with-at-least-16-charact
 pnpm api
 ```
 
-The process applies pending migrations and listens on `http://127.0.0.1:8787`. It cannot bind to a remote interface. Until Task 20 adds deployment controls, submissions must use a `fixture_only` profile whose approved URLs and resource origins are loopback addresses.
+The process applies pending migrations and listens on `http://127.0.0.1:8787`. Open that address for the Task 17 dashboard, or call the endpoints directly. It cannot bind to a remote interface. Until Task 20 adds deployment controls, submissions must use a `fixture_only` profile whose approved URLs and resource origins are loopback addresses. See [Local validation dashboard](dashboard.md) for the UI behavior and polling boundary.
 
 Requests use `Authorization: Bearer <token>`. Creating a run also requires an `Idempotency-Key` containing 1 to 200 bytes.
 
