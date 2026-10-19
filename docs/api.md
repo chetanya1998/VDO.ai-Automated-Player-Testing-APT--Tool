@@ -17,7 +17,9 @@ Requests use `Authorization: Bearer <token>`. Creating a run also requires an `I
 | Method | Path | Result |
 |---|---|---|
 | `POST` | `/v1/runs` | Validate and enqueue `{ profile, targetUrl, deviceId }` |
+| `POST` | `/v1/batches` | Validate and enqueue bounded `{ profile, targetUrls, deviceIds }` items |
 | `GET` | `/v1/runs` | List the team's 100 newest runs |
+| `GET` | `/v1/batches/{batchId}` | Read team-scoped item status and case/device completeness |
 | `GET` | `/v1/runs/{runId}` | Read team-scoped run status and progress |
 | `GET` | `/v1/runs/{runId}/report` | Read a final report, or `202` while it is unavailable |
 | `GET` | `/v1/runs/{runId}/export.json` | Download a redacted structured technical report |
@@ -27,3 +29,5 @@ Requests use `Authorization: Bearer <token>`. Creating a run also requires an `I
 An identical team/key submission returns the original run. Reusing the key with a different profile, URL or device returns `409`. A full queue returns `429` with `queue_capacity_reached`. HTTP error bodies contain stable codes and safe messages without database details, credentials or stack traces.
 
 Report exports require a final report and otherwise return `409 report_not_ready`. They use the same team scope as report inspection. See [Technical report exports](report-export.md) for contents and redaction behavior.
+
+Batch submissions keep mixed admission results, use one independent run deadline per accepted URL/device item, and never retry automatically. See [Bounded URL batches](batches.md) for limits, status fields and retry behavior.

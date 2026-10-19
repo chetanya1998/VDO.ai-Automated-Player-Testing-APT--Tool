@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { RunDetail } from "./RunDetail.js";
 import { RunForm, type RunSubmission } from "./RunForm.js";
-import type { ReportEnvelope, RunSummary } from "./types.js";
+import { BatchForm, type BatchSubmission } from "./BatchForm.js";
+import { BatchStatus } from "./BatchStatus.js";
+import type { BatchDetail, ReportEnvelope, RunSummary } from "./types.js";
 
 async function responseJson<T>(response: Response): Promise<T> {
   const body: unknown = await response.json();
@@ -25,6 +27,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [pollingPaused, setPollingPaused] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batch, setBatch] = useState<BatchDetail | null>(null);
+  const [batchRefresh, setBatchRefresh] = useState(0);
 
   const request = useCallback(async <T,>(path: string, authToken: string, init: RequestInit = {}): Promise<T> => {
     const response = await fetch(path, {
@@ -74,6 +79,49 @@ export function App() {
       setBusy(false);
     }
   }
+
+  async function submitBatch(input: BatchSubmission) {
+    if (token === null) throw new Error("Connect with an access token first");
+    setBusy(true);
+    setError(null);
+    try {
+      const created = await request<BatchDetail>("/v1/batches", token, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": input.idempotencyKey },
+        body: JSON.stringify({ profile: input.profile, targetUrls: input.targetUrls, deviceIds: input.deviceIds }),
+      });
+      setBatch(created);
+      setBatchId(created.batchId);
+      await loadRuns(token);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Batch submission failed";
+      setError(message);
+      throw new Error(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (token === null || batchId === null) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let attempts = 0;
+    const poll = async () => {
+      try {
+        const current = await request<BatchDetail>(`/v1/batches/${encodeURIComponent(batchId)}`, token);
+        if (cancelled) return;
+        setBatch(current);
+        attempts += 1;
+        if (current.status === "in_progress" && attempts < 60) timer = setTimeout(() => void poll(), 2_000);
+        await loadRuns(token);
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "Batch could not be loaded");
+      }
+    };
+    void poll();
+    return () => { cancelled = true; if (timer !== undefined) clearTimeout(timer); };
+  }, [batchId, batchRefresh, loadRuns, request, token]);
 
   useEffect(() => {
     if (token === null || selectedId === null) {
@@ -176,11 +224,13 @@ export function App() {
       <header className="topbar">
         <a className="brand-mark" href="#top">VDO<span>.AI</span></a>
         <div><span className="connection-dot" aria-hidden="true" />Local validator</div>
-        <button className="text-button" type="button" onClick={() => { setToken(null); setSelectedId(null); setRuns([]); }}>Disconnect</button>
+        <button className="text-button" type="button" onClick={() => { setToken(null); setSelectedId(null); setBatchId(null); setBatch(null); setRuns([]); }}>Disconnect</button>
       </header>
       <div className="workspace" id="top">
         <aside className="left-column">
           <RunForm busy={busy} onSubmit={submitRun} />
+          <BatchForm busy={busy} onSubmit={submitBatch} />
+          {batch !== null && <BatchStatus batch={batch} onOpenRun={setSelectedId} onRefresh={() => setBatchRefresh((value) => value + 1)} />}
           <section className="panel history-panel" aria-labelledby="history-title">
             <div className="panel-heading"><div><p className="eyebrow">Team history</p><h2 id="history-title">Recent runs</h2></div><button className="text-button" type="button" onClick={() => void loadRuns(token)}>Refresh</button></div>
             {runs.length === 0 ? <p className="empty">No runs for this team.</p> : (

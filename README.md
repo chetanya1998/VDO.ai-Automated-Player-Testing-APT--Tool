@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–18, 22–27, and 29 are implemented:
+Tasks 01–08, 11–18, 22–29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -30,6 +30,7 @@ Tasks 01–08, 11–18, 22–27, and 29 are implemented:
 - a loopback-only authenticated run API with team-scoped create, list, status, report and artifact access plus persisted idempotency;
 - a responsive local dashboard for fixture submission, bounded status polling, team history, health and RCA summaries, TC-1 through TC-23 coverage, authenticated artifacts, and a filterable evidence timeline;
 - authenticated redacted JSON and self-contained offline HTML technical-report exports with all persisted checks, evidence summaries, findings, timings, environment/profile versions and safe artifact references;
+- authenticated bounded URL/device batches with persisted mixed admission results, independent run deadlines, explicit retries, per-item report links and aggregate case/device completeness;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -51,7 +52,7 @@ pnpm test
 
 Copy your local PostgreSQL connection strings into ignored `.env.local`, export them into the process, then apply the migration with `DATABASE_URL` or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
 
-Start the authenticated local API with `pnpm api` after setting `DATABASE_URL` and `VDO_VALIDATOR_API_IDENTITIES`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md) and [Local validation dashboard](docs/dashboard.md).
+Start the authenticated local API with `pnpm api` after setting `DATABASE_URL` and `VDO_VALIDATOR_API_IDENTITIES`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md), [Local validation dashboard](docs/dashboard.md), and [Bounded URL batches](docs/batches.md).
 
 Validate the fixture profile:
 
@@ -120,5 +121,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-Task 18 is complete and verified through renderer checks plus authenticated HTTP and PostgreSQL acceptance. Task 28, bounded bulk URL validation, is next.
+Task 28 is complete and verified through dashboard rendering plus authenticated HTTP and PostgreSQL acceptance. Task 20, internal-pilot hardening and deployment controls, is next.
 

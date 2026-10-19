@@ -32,6 +32,67 @@ export interface EnqueueRunResult {
   deadlineAt: string;
 }
 
+export interface BatchItemInput {
+  itemIndex: number;
+  targetUrl: string;
+  deviceId: string;
+  runId: string;
+  rejection?: { code: string; message: string };
+}
+
+export interface EnqueueBatchInput {
+  batchId: string;
+  profileId: string;
+  profileVersion: number;
+  profileHash: string;
+  profileSnapshot: JsonValue;
+  teamId: string;
+  userId: string;
+  idempotencyKey: string;
+  submissionHash: string;
+  items: BatchItemInput[];
+}
+
+export interface EnqueueBatchResult {
+  batchId: string;
+  created: boolean;
+}
+
+export interface BatchItemDetail {
+  itemIndex: number;
+  targetUrl: string;
+  deviceId: string;
+  admissionState: "accepted" | "rejected";
+  state: string;
+  runId: string | null;
+  deadlineAt: string | null;
+  reportAvailable: boolean;
+  reportedCaseIds: string[];
+  error: { code: string; message: string } | null;
+}
+
+export interface BatchDetail {
+  batchId: string;
+  createdAt: string;
+  status: "in_progress" | "completed" | "completed_with_issues" | "rejected";
+  counts: {
+    total: number;
+    accepted: number;
+    rejected: number;
+    terminal: number;
+  };
+  completeness: {
+    devices: Array<{
+      deviceId: string;
+      acceptedRuns: number;
+      terminalRuns: number;
+      reportedCaseIds: string[];
+    }>;
+    cases: Array<{ testCaseId: string; reportedRuns: number; expectedRuns: number }>;
+  };
+  items: BatchItemDetail[];
+}
+
 export interface RunSummary {
   runId: string;
   targetUrl: string;
@@ -288,6 +349,160 @@ export class PostgresStore {
         deadlineAt: instant(run.rows[0]!.deadline_at),
       };
     });
+  }
+
+  async enqueueBatch(input: EnqueueBatchInput): Promise<EnqueueBatchResult> {
+    return transaction(this.pool, async (client) => {
+      if (input.teamId.trim() === "" || input.userId.trim() === "") throw new TypeError("teamId and userId are required");
+      if (input.idempotencyKey.trim() === "" || Buffer.byteLength(input.idempotencyKey, "utf8") > 200) {
+        throw new TypeError("idempotencyKey must contain 1 to 200 bytes");
+      }
+      if (input.items.length === 0) throw new TypeError("batch items are required");
+      if (new Set(input.items.map((item) => item.itemIndex)).size !== input.items.length) throw new TypeError("batch item indexes must be unique");
+      await client.query("SELECT pg_advisory_xact_lock(867530902)");
+      const prior = await client.query<{ batch_id: string; submission_hash: string }>(
+        "SELECT batch_id, submission_hash FROM validator_batches WHERE team_id = $1 AND idempotency_key = $2",
+        [input.teamId, input.idempotencyKey],
+      );
+      if (prior.rows[0] !== undefined) {
+        if (prior.rows[0].submission_hash !== input.submissionHash) throw new IdempotencyConflictError();
+        return { batchId: prior.rows[0].batch_id, created: false };
+      }
+      await client.query(
+        `INSERT INTO validator_profiles (profile_id, profile_version, profile_hash, snapshot)
+         VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT (profile_id, profile_version) DO NOTHING`,
+        [input.profileId, input.profileVersion, input.profileHash, JSON.stringify(input.profileSnapshot)],
+      );
+      const profile = await client.query<{ profile_hash: string }>(
+        "SELECT profile_hash FROM validator_profiles WHERE profile_id = $1 AND profile_version = $2",
+        [input.profileId, input.profileVersion],
+      );
+      if (profile.rows[0]?.profile_hash !== input.profileHash) throw new Error("profile version is immutable and its hash does not match");
+      await client.query(
+        `INSERT INTO validator_batches (
+           batch_id, team_id, user_id, idempotency_key, submission_hash, profile_id, profile_version
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [input.batchId, input.teamId, input.userId, input.idempotencyKey, input.submissionHash, input.profileId, input.profileVersion],
+      );
+      const active = await client.query<{ count: string }>("SELECT count(*)::text AS count FROM validator_jobs WHERE state IN ('queued', 'leased')");
+      let available = Math.max(0, this.options.capacity - Number(active.rows[0]?.count ?? 0));
+      for (const item of [...input.items].sort((left, right) => left.itemIndex - right.itemIndex)) {
+        const rejection = item.rejection ?? (available === 0
+          ? { code: "queue_capacity_reached", message: "validator queue capacity reached" }
+          : null);
+        if (rejection !== null) {
+          await client.query(
+            `INSERT INTO validator_batch_items (
+               batch_id, item_index, target_url, device_id, admission_state, error_code, error_message
+             ) VALUES ($1, $2, $3, $4, 'rejected', $5, $6)`,
+            [input.batchId, item.itemIndex, item.targetUrl, item.deviceId, rejection.code, rejection.message],
+          );
+          continue;
+        }
+        await client.query(
+          `INSERT INTO validator_runs (
+             run_id, profile_id, profile_version, target_url, device_id, deadline_at, retention_until,
+             team_id, user_id
+           ) VALUES (
+             $1, $2, $3, $4, $5,
+             clock_timestamp() + ($6 * interval '1 millisecond'),
+             clock_timestamp() + ($7 * interval '1 millisecond'),
+             $8, $9
+           )`,
+          [
+            item.runId, input.profileId, input.profileVersion, item.targetUrl, item.deviceId,
+            this.options.runDeadlineMs, this.options.retentionMs, input.teamId, input.userId,
+          ],
+        );
+        await client.query(
+          "INSERT INTO validator_jobs (run_id, deadline_at) SELECT run_id, deadline_at FROM validator_runs WHERE run_id = $1",
+          [item.runId],
+        );
+        await client.query(
+          `INSERT INTO validator_batch_items (batch_id, item_index, target_url, device_id, admission_state, run_id)
+           VALUES ($1, $2, $3, $4, 'accepted', $5)`,
+          [input.batchId, item.itemIndex, item.targetUrl, item.deviceId, item.runId],
+        );
+        available -= 1;
+      }
+      return { batchId: input.batchId, created: true };
+    });
+  }
+
+  async getBatchForTeam(teamId: string, batchId: string): Promise<BatchDetail | null> {
+    const result = await this.pool.query<{
+      batch_id: string; batch_created_at: Date; item_index: number; target_url: string; device_id: string;
+      admission_state: "accepted" | "rejected"; error_code: string | null; error_message: string | null;
+      run_id: string | null; execution_state: string | null; deadline_at: Date | null; final_report: ReportSnapshot | null;
+    }>(
+      `SELECT batches.batch_id, batches.created_at AS batch_created_at,
+              items.item_index, items.target_url, items.device_id, items.admission_state,
+              items.error_code, items.error_message, items.run_id,
+              runs.execution_state, runs.deadline_at, runs.final_report
+       FROM validator_batches AS batches
+       JOIN validator_batch_items AS items ON items.batch_id = batches.batch_id
+       LEFT JOIN validator_runs AS runs ON runs.run_id = items.run_id
+       WHERE batches.team_id = $1 AND batches.batch_id = $2
+       ORDER BY items.item_index`,
+      [teamId, batchId],
+    );
+    if (result.rows[0] === undefined) return null;
+    const items: BatchItemDetail[] = result.rows.map((row) => {
+      const reportedCaseIds = Array.isArray(row.final_report?.checks)
+        ? [...new Set(row.final_report.checks.map((check) => {
+          if (check === null || typeof check !== "object" || Array.isArray(check)) return null;
+          const value = check.testCaseId;
+          return typeof value === "string" ? value : null;
+        }).filter((value): value is string => value !== null))].sort((left, right) => Number(left.slice(3)) - Number(right.slice(3)))
+        : [];
+      const state = row.admission_state === "rejected" ? "rejected" : row.execution_state ?? "expired";
+      return {
+        itemIndex: row.item_index,
+        targetUrl: row.target_url,
+        deviceId: row.device_id,
+        admissionState: row.admission_state,
+        state,
+        runId: row.run_id,
+        deadlineAt: row.deadline_at === null ? null : instant(row.deadline_at),
+        reportAvailable: row.final_report !== null,
+        reportedCaseIds,
+        error: row.error_code === null || row.error_message === null ? null : { code: row.error_code, message: row.error_message },
+      };
+    });
+    const accepted = items.filter((item) => item.admissionState === "accepted");
+    const rejected = items.length - accepted.length;
+    const terminalStates = new Set(["completed", "timed_out", "errored", "expired"]);
+    const terminal = accepted.filter((item) => terminalStates.has(item.state)).length;
+    const deviceIds = [...new Set(items.map((item) => item.deviceId))].sort();
+    const cases = Array.from({ length: 23 }, (_, index) => `TC-${index + 1}`);
+    const hasTerminalFailures = accepted.some((item) => item.state !== "completed" && terminalStates.has(item.state));
+    const status = accepted.length === 0 ? "rejected"
+      : terminal < accepted.length ? "in_progress"
+      : rejected > 0 || hasTerminalFailures ? "completed_with_issues"
+      : "completed";
+    return {
+      batchId: result.rows[0].batch_id,
+      createdAt: instant(result.rows[0].batch_created_at),
+      status,
+      counts: { total: items.length, accepted: accepted.length, rejected, terminal },
+      completeness: {
+        devices: deviceIds.map((deviceId) => {
+          const runs = accepted.filter((item) => item.deviceId === deviceId);
+          return {
+            deviceId,
+            acceptedRuns: runs.length,
+            terminalRuns: runs.filter((item) => terminalStates.has(item.state)).length,
+            reportedCaseIds: [...new Set(runs.flatMap((item) => item.reportedCaseIds))].sort((left, right) => Number(left.slice(3)) - Number(right.slice(3))),
+          };
+        }),
+        cases: cases.map((testCaseId) => ({
+          testCaseId,
+          reportedRuns: accepted.filter((item) => item.reportedCaseIds.includes(testCaseId)).length,
+          expectedRuns: accepted.length,
+        })),
+      },
+      items,
+    };
   }
 
   async getRunSummary(teamId: string, runId: string): Promise<RunDetail | null> {

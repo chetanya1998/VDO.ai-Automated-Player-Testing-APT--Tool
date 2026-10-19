@@ -9,6 +9,7 @@ import { snapshotProfile } from "../profile.js";
 import { buildTechnicalReportExport, renderTechnicalReportHtml } from "../report/export.js";
 import { IdempotencyConflictError, PostgresStore, QueueCapacityError } from "../store.js";
 import type { ApiIdentity } from "./auth.js";
+import { BatchApiError, presentBatch, submitBatch } from "./batches.js";
 import { serveDashboard } from "./static.js";
 
 const MAX_BODY_BYTES = 1_048_576;
@@ -80,6 +81,16 @@ function runId(pathname: string, suffix = ""): string | null {
 
 function artifactId(pathname: string): string | null {
   const match = /^\/v1\/artifacts\/([^/]+)$/.exec(pathname);
+  if (match?.[1] === undefined) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    throw new ApiError(400, "invalid_path", "path identifier is invalid");
+  }
+}
+
+function batchId(pathname: string): string | null {
+  const match = /^\/v1\/batches\/([^/]+)$/.exec(pathname);
   if (match?.[1] === undefined) return null;
   try {
     return decodeURIComponent(match[1]);
@@ -169,6 +180,19 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
     await createRun(request, response, identity, options.store);
     return;
   }
+  if (request.method === "POST" && url.pathname === "/v1/batches") {
+    const key = request.headers["idempotency-key"];
+    const result = await submitBatch(options.store, identity, typeof key === "string" ? key : undefined, await requestJson(request));
+    json(response, result.created ? 201 : 200, { created: result.created, ...result.detail });
+    return;
+  }
+  const requestedBatchId = batchId(url.pathname);
+  if (request.method === "GET" && requestedBatchId !== null) {
+    const batch = await options.store.getBatchForTeam(identity.teamId, requestedBatchId);
+    if (batch === null) throw new ApiError(404, "not_found", "batch was not found");
+    json(response, 200, presentBatch(batch));
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/v1/runs") {
     json(response, 200, { runs: await options.store.listRuns(identity.teamId) });
     return;
@@ -232,7 +256,7 @@ export function createRunApiServer(options: RunApiOptions): Server {
         json(response, 429, { error: { code: "queue_capacity_reached", message: "validator queue capacity reached" } });
       } else if (error instanceof IdempotencyConflictError) {
         json(response, 409, { error: { code: "idempotency_conflict", message: error.message } });
-      } else if (error instanceof ApiError) {
+      } else if (error instanceof ApiError || error instanceof BatchApiError) {
         json(response, error.status, { error: { code: error.code, message: error.message } });
       } else if (error instanceof TypeError || error instanceof UrlPolicyError) {
         json(response, 400, { error: { code: "invalid_request", message: error.message } });

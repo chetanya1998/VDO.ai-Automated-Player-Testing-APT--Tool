@@ -67,8 +67,22 @@ textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-
 .panel h1, .panel h2, .panel h3, .panel h4 { letter-spacing: -.025em; margin-top: 0; }
 .panel h2 { font-size: 1.3rem; margin-bottom: 1rem; }
 .form-panel { display: grid; gap: 1rem; }
+.form-note { font-size: .75rem; line-height: 1.5; margin: 0; }
 .local-chip { background: #e8f1ed; border-radius: 999px; color: var(--forest); font-size: .68rem; font-weight: 800; padding: .35rem .6rem; text-transform: uppercase; }
 .history-panel { min-height: 240px; }
+.batch-panel { align-content: start; }
+.batch-counts { display: grid; gap: .45rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: .8rem 0; }
+.batch-counts span { background: #f2f7f4; border-radius: 5px; color: var(--muted); font-size: .7rem; padding: .55rem; }
+.batch-counts strong { color: var(--ink); display: block; font-size: 1.15rem; }
+.batch-list, .plain-list { list-style: none; margin: .6rem 0 0; padding: 0; }
+.batch-list { display: grid; gap: .45rem; }
+.batch-item { align-items: start; border: 1px solid var(--line); border-left: 4px solid var(--blue); border-radius: 5px; display: flex; gap: .5rem; justify-content: space-between; padding: .65rem; }
+.batch-item-rejected, .batch-item-errored, .batch-item-timed_out { border-left-color: var(--red); }
+.batch-item-completed { border-left-color: #287547; }
+.batch-item strong, .batch-item small { display: block; overflow-wrap: anywhere; }
+.batch-item strong { font-size: .76rem; }
+.batch-item small { color: var(--muted); font-size: .65rem; margin-top: .2rem; }
+.plain-list li { border-top: 1px solid var(--line); color: var(--muted); font-size: .72rem; padding: .45rem 0; }
 .run-list { display: grid; gap: .5rem; list-style: none; margin: .5rem 0 0; padding: 0; }
 .run-link { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 6px; color: inherit; cursor: pointer; display: flex; gap: 1rem; justify-content: space-between; padding: .75rem; text-align: left; width: 100%; }
 .run-link:hover, .run-link.selected { background: #f2f7f4; border-color: #cbdad3; }

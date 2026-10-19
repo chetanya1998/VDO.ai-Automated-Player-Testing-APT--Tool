@@ -79,6 +79,33 @@ export interface ReportEnvelope {
   artifacts: Artifact[];
 }
 
+export interface BatchItem {
+  itemIndex: number;
+  targetUrl: string;
+  deviceId: string;
+  admissionState: "accepted" | "rejected";
+  state: string;
+  runId: string | null;
+  deadlineAt: string | null;
+  reportAvailable: boolean;
+  reportedCaseIds: string[];
+  error: { code: string; message: string } | null;
+  runUrl: string | null;
+  reportUrl: string | null;
+}
+
+export interface BatchDetail {
+  batchId: string;
+  createdAt: string;
+  status: "in_progress" | "completed" | "completed_with_issues" | "rejected";
+  counts: { total: number; accepted: number; rejected: number; terminal: number };
+  completeness: {
+    devices: Array<{ deviceId: string; acceptedRuns: number; terminalRuns: number; reportedCaseIds: string[] }>;
+    cases: Array<{ testCaseId: string; reportedRuns: number; expectedRuns: number }>;
+  };
+  items: BatchItem[];
+}
+
 export interface TimelineRow extends EvidenceItem {
   elapsedMs: number;
   label: string;
