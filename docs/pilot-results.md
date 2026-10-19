@@ -18,7 +18,7 @@ The mandatory manifest is [`tests/pilot/manifest.json`](../tests/pilot/manifest.
 
 No QA-labeled corpus, approved production profiles/pages, confirmed rule decisions, real mobile evidence, cost source or completed Task 20 deployment acceptance was supplied. Existing synthetic unit and fixture checks verify code behavior but are not pilot observations and are not used to manufacture accuracy or time-saving claims.
 
-Run `pnpm pilot:evaluate -- observations.json results.json` after collecting the agreed corpus. The command validates every record, calculates the published measures and returns exit code `2` while any release gate fails. It requires:
+Run `pnpm pilot:evaluate -- observations.json results.json` after collecting the agreed corpus. The input must include the evidence-backed readiness record described in the [support runbook](support-runbook.md); caller-supplied readiness booleans are not accepted. The command validates every record, calculates the published measures, emits owned follow-up cards for QA disagreements and returns exit code `2` while any release gate fails. It requires:
 
 - no healthy scenario reported as `FAIL`;
 - every seeded critical fault reported as `FAIL`;
@@ -28,6 +28,8 @@ Run `pnpm pilot:evaluate -- observations.json results.json` after collecting the
 - three article transitions for TC-23;
 - complete expected QA diagnoses and cost records;
 - confirmed rule decisions and passed access, redaction and deployed-egress checks;
+- a current Task 20 acceptance matching the browser image, every pilot profile and origin;
+- real mobile and iOS evidence plus corpus and cost-source evidence;
 - submission-to-report p95 no greater than 300 seconds under the declared concurrency.
 
 Disagreements cannot be reviewed or converted into follow-up cards until observed validator results and QA labels exist. Release remains blocked rather than narrowing scope without owner approval.

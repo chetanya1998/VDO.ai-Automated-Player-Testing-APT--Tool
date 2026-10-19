@@ -86,7 +86,7 @@ The report command requires a `production` profile plus confirmed event aliases,
 
 Run both enabled desktop and mobile profiles with `pnpm matrix --` using the same options and an output directory in place of the report file. It creates one complete TC-1 through TC-23 report per device and `matrix.json`. See [desktop, mobile and real-iOS validation](docs/device-validation.md) for the hardware evidence procedure and `--real-device-evidence` format.
 
-After collecting the agreed QA-labeled corpus, calculate the pilot metrics and release gates with `pnpm pilot:evaluate -- observations.json results.json`. See [Pilot release results](docs/pilot-results.md) and [Pilot support runbook](docs/support-runbook.md). The current corpus is empty, so no accuracy, latency or release claim is made.
+After collecting the agreed QA-labeled corpus and its evidence-backed readiness record, calculate the pilot metrics and release gates with `pnpm pilot:evaluate -- observations.json results.json`. See [Pilot release results](docs/pilot-results.md) and [Pilot support runbook](docs/support-runbook.md). The current corpus is empty, so no accuracy, latency or release claim is made.
 
 AI explanations are optional and require an explicitly approved provider policy, credential and user request. See [Optional AI explanations](docs/ai-explanations.md). No production model configuration is committed.
 

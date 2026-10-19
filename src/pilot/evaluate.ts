@@ -1,4 +1,5 @@
 import { VERDICTS, type Verdict } from "../contracts.js";
+import { evaluatePilotReadiness, type PilotReadinessEvaluation } from "./readiness.js";
 
 const CASE_IDS = Array.from({ length: 23 }, (_, index) => `TC-${index + 1}`);
 const DEVICE_CLASSES = ["desktop", "mobile"] as const;
@@ -28,6 +29,22 @@ interface PilotRecord {
 }
 
 export interface PilotEvaluation {
+  readiness: PilotReadinessEvaluation;
+  disagreements: Array<{
+    scenarioId: string;
+    testCaseId: string;
+    deviceId: string;
+    expectedVerdict: Verdict;
+    actualVerdict: Verdict;
+    expectedDiagnosisCode: string | null;
+    actualDiagnosisCode: string | null;
+  }>;
+  followUpCards: Array<{
+    title: string;
+    owner: string;
+    scenarioId: string;
+    testCaseId: string;
+  }>;
   corpus: {
     records: number;
     distinctScenarios: number;
@@ -59,6 +76,7 @@ export interface PilotEvaluation {
     accessRedactionAndEgressPassed: boolean;
     latencyP95Within300Seconds: boolean;
     costMeasured: boolean;
+    pilotReadinessPassed: boolean;
   };
   releaseReady: boolean;
   failures: string[];
@@ -150,13 +168,14 @@ function percentile(values: readonly number[], fraction: number): number | null 
   return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)]!;
 }
 
-export function evaluatePilot(value: unknown): PilotEvaluation {
+export function evaluatePilot(value: unknown, now = new Date()): PilotEvaluation {
   const input = object(value, "pilot input");
-  const declaredConcurrency = integer(input.declaredConcurrency, "declaredConcurrency", 1);
-  const decisionsConfirmed = boolean(input.decisionsConfirmed, "decisionsConfirmed");
-  const securityControlsPassed = boolean(input.accessRedactionAndEgressPassed, "accessRedactionAndEgressPassed");
+  const readiness = evaluatePilotReadiness(input.readiness, now);
+  const declaredConcurrency = readiness.declaredConcurrency;
   if (!Array.isArray(input.records)) throw new TypeError("records must be an array");
   const records = input.records.map(parseRecord);
+  const scenarioIds = records.map((record) => record.scenarioId);
+  if (new Set(scenarioIds).size !== scenarioIds.length) throw new TypeError("records must not contain duplicate scenarioId values");
 
   const durations = records.map((item) => Date.parse(item.reportedAt) - Date.parse(item.submittedAt));
   const healthy = records.filter((item) => item.scenarioKind === "healthy");
@@ -173,6 +192,16 @@ export function evaluatePilot(value: unknown): PilotEvaluation {
   const completeKeys = requiredKeys.filter((key) => observedKeys.has(key)).length;
   const costRecords = records.filter((item) => item.costUsd !== null);
   const ambiguous = records.filter((item) => item.scenarioKind === "ambiguous");
+  const disagreements = records.filter((item) => item.expectedVerdict !== item.actualVerdict || item.expectedDiagnosisCode !== item.actualDiagnosisCode)
+    .map((item) => ({
+      scenarioId: item.scenarioId,
+      testCaseId: item.testCaseId,
+      deviceId: item.deviceId,
+      expectedVerdict: item.expectedVerdict,
+      actualVerdict: item.actualVerdict,
+      expectedDiagnosisCode: item.expectedDiagnosisCode,
+      actualDiagnosisCode: item.actualDiagnosisCode,
+    }));
 
   const gates = {
     noHealthyFalseFailures: healthy.length > 0 && healthy.every((item) => item.actualVerdict !== "FAIL"),
@@ -183,10 +212,11 @@ export function evaluatePilot(value: unknown): PilotEvaluation {
     caseDeviceScenarioCoverageComplete: completeKeys === requiredKeys.length,
     threeArticleTransitionsComplete: records.filter((item) => item.testCaseId === "TC-23").length > 0
       && records.filter((item) => item.testCaseId === "TC-23").every((item) => item.articleTransitions >= 3),
-    decisionsConfirmed,
-    accessRedactionAndEgressPassed: securityControlsPassed,
+    decisionsConfirmed: readiness.gates.allRuleDecisionsConfirmed,
+    accessRedactionAndEgressPassed: readiness.gates.deploymentAcceptanceValid && readiness.gates.approvedProfilesCovered,
     latencyP95Within300Seconds: durations.length > 0 && percentile(durations, 0.95)! <= 300_000,
     costMeasured: records.length > 0 && costRecords.length === records.length,
+    pilotReadinessPassed: readiness.ready,
   };
   const labels: Record<keyof typeof gates, string> = {
     noHealthyFalseFailures: "healthy corpus contains a false failure or is empty",
@@ -200,10 +230,19 @@ export function evaluatePilot(value: unknown): PilotEvaluation {
     accessRedactionAndEgressPassed: "access, redaction and deployed egress checks have not passed",
     latencyP95Within300Seconds: "p95 submission-to-report exceeds 300 seconds or is unavailable",
     costMeasured: "cost was not recorded for every corpus observation",
+    pilotReadinessPassed: "pilot readiness evidence is incomplete or invalid",
   };
   const failures = (Object.entries(gates) as Array<[keyof typeof gates, boolean]>).filter(([, passed]) => !passed).map(([gate]) => labels[gate]);
 
   return {
+    readiness,
+    disagreements,
+    followUpCards: disagreements.map((item) => ({
+      title: `Resolve ${item.testCaseId} disagreement for ${item.scenarioId}`,
+      owner: readiness.labelOwner,
+      scenarioId: item.scenarioId,
+      testCaseId: item.testCaseId,
+    })),
     corpus: {
       records: records.length,
       distinctScenarios: new Set(records.map((item) => item.scenarioId)).size,

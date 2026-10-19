@@ -18,4 +18,8 @@ Compare the validator check, cited evidence and probable cause with the QA label
 
 ## Evaluation procedure
 
-Collect one observation record per TC, scenario and device. Record submission/report timestamps from the real API, the expected and actual verdict, QA diagnosis code, all evidence IDs, ambiguous join count, article transitions and measured cost. Run the evaluator under the declared concurrency and archive both input and output with the deployment version. Exit code `0` means every encoded gate passed; exit code `2` means the result is measured but not releasable; exit code `1` means the input itself is invalid.
+Collect one observation record per TC, scenario and device. Every `scenarioId` must be unique. Record submission/report timestamps from the real API, the expected and actual verdict, QA diagnosis code, all evidence IDs, ambiguous join count, article transitions and measured cost.
+
+The input must contain a `readiness` object with `schemaVersion: 1`. Bind it to the real QA corpus and label-set IDs, the label owner, evidence references with SHA-256 digests, evidence-backed confirmations for D01 through D14, and the Task 20 deployment acceptance. Include the running browser image digest, every pilot profile hash and HTTPS origin, device evidence, declared concurrency and the measured cost-source evidence. At least one real mobile result and one real iOS result are required. Emulated iOS does not satisfy the real-device gate.
+
+Run `pnpm pilot:evaluate -- observations.json results.json` and archive the input, output and referenced evidence with the deployment version. The result repeats the accepted corpus, deployment and cost-source IDs. Verdict or diagnosis disagreements produce owned `followUpCards`; review each card with the label owner before release. Exit code `0` means every encoded gate and readiness check passed; exit code `2` means the result is measured but not releasable; exit code `1` means the input itself is invalid.
