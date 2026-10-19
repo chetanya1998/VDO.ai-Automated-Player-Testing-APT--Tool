@@ -47,4 +47,4 @@ Redirects are rejected so credentials cannot move to another endpoint. The beare
 
 Only the five approved logger fields and four candidate shared identifiers survive normalization. Other response fields are discarded. `completeThrough` at or after the requested `until` makes even an empty record set complete. Missing watermark coverage at the deadline produces an incomplete result, while authentication, transport and contract failures produce unavailable results.
 
-Candidate identifiers are retained without claiming correlation. Task 10 may join browser and backend records only after Backend and Player Engineering confirm which identifier is present at both sources and authorize its mapping. URL or timestamp proximity is never sufficient.
+Candidate identifiers are retained without claiming correlation. The Task 10 correlator can consume them only through a confirmed source-specific mapping to a browser evidence key. URL or timestamp proximity is never sufficient. See [Browser/backend event correlation](backend-correlation.md).

@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–18, 22–29 are implemented:
+Tasks 01–18 and 22–29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -32,6 +32,7 @@ Tasks 01–08, 11–18, 22–29 are implemented:
 - authenticated redacted JSON and self-contained offline HTML technical-report exports with all persisted checks, evidence summaries, findings, timings, environment/profile versions and safe artifact references;
 - authenticated bounded URL/device batches with persisted mixed admission results, independent run deadlines, explicit retries, per-item report links and aggregate case/device completeness;
 - an optional deadline-bounded backend logger client with scoped bearer authentication, cursor pagination, rate-limit handling and ingestion watermark metadata; live access and correlation remain unverified;
+- exact, ambiguous and unmatched browser/backend correlation using confirmed shared-ID mappings, with timing proximity excluded from identity proof and unresolved identity blocking high-confidence backend RCA;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -98,6 +99,7 @@ config/                 Fixture-only profiles, event aliases, and site identity 
 docs/                   Integration contract and implementation plan
 src/browser/            Bounded browser runner, evidence capture, and URL policy
 src/evidence/           Deterministic capture normalization
+src/evidence/correlate.ts Verified shared-ID browser/backend correlation
 src/logger/             Five-field browser logger payload parsing
 src/logger/client.ts    Optional bounded backend logger collection
 src/profile.ts          Deterministic profile snapshots
