@@ -215,3 +215,9 @@ These are real owner-provided inputs rather than coding tasks:
 ## Definition of fully working
 
 The tool is fully working only when a user can open the production Vercel dashboard, authenticate with a real team identity, submit an approved live publisher URL, have a real Coolify worker execute it in an isolated Chromium service, receive persisted TC-1–TC-23 results and evidence, download authorized reports/artifacts, and repeat the workflow after service restart and tested rollback. The deployed system must pass isolation, redaction, authorization, cleanup, backup/restore, monitoring and pilot release gates.
+
+## P1 implementation status
+
+The production contract validator is implemented in `src/production/contract.ts`. Run `pnpm production:validate <production-contract.json>` after copying `config/production-contract.template.json` to an ignored owner-controlled location and replacing every blank with real approved values and evidence digests. The committed template is deliberately `draft` and fails validation; it is an input checklist, not a deployable configuration.
+
+P1 remains open until owners supply and approve the real contract. The validator requires exact staging/production HTTPS origins, a documented identity and rotation model, storage and restore evidence, an explicit logger decision, D01–D14 exactly once with evidence, and SHA-256 bindings for the production profile plus all ten rule/policy files. Credentials themselves belong in the deployment secret manager and must not be placed in the contract.
