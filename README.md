@@ -219,6 +219,8 @@ Next executable deployment packages are:
 
 The authoritative task order and current handoff are in [TASKS.md](docs/plan/TASKS.md) and [STATUS.md](docs/plan/STATUS.md).
 
+The dependency-ordered remaining work for a fully working product—application blockers, Coolify backend deployment, Vercel frontend deployment and release evidence—is in the [production delivery backlog](docs/plan/PRODUCTION-DELIVERY.md).
+
 ## Deployment strategy
 
 Deployment uses two controlled stages.
