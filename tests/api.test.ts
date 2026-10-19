@@ -43,7 +43,9 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
   const admin = new Pool({ connectionString, max: 1 });
   const pool = new Pool({ connectionString, max: 6, options: `-c search_path=${schema}` });
   const artifacts = await mkdtemp(join(tmpdir(), "validator-api-artifacts-"));
+  const outsideArtifacts = await mkdtemp(join(tmpdir(), "validator-api-outside-"));
   const artifactPath = join(artifacts, "capture.txt");
+  const outsideArtifactPath = join(outsideArtifacts, "outside.txt");
   const artifactBody = "real API artifact";
   let server: ReturnType<typeof createRunApiServer> | undefined;
   try {
@@ -53,6 +55,7 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     server = createRunApiServer({
       store,
       dashboardRoot: process.cwd(),
+      artifactRoot: artifacts,
       authenticate: createBearerAuthenticator([
         { token: teamAToken, userId: "alice", teamId: "team-a" },
         { token: teamBToken, userId: "bob", teamId: "team-b" },
@@ -63,6 +66,9 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const targetOne = `${base}/fixture/one`;
     const targetTwo = `${base}/fixture/two`;
     const fixtureProfile = profile([targetOne, targetTwo]);
+
+    assert.equal((await fetch(`${base}/health/live`)).status, 200);
+    assert.equal((await fetch(`${base}/health/ready`)).status, 200);
 
     const dashboard = await fetch(base);
     assert.equal(dashboard.status, 200);
@@ -112,12 +118,20 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const job = await store.claim("api-test-worker");
     assert.equal(job?.runId, createdBody.runId);
     await writeFile(artifactPath, artifactBody, "utf8");
+    await writeFile(outsideArtifactPath, "must not be served", "utf8");
     await store.saveArtifactReference(createdBody.runId, "api-test-worker", {
       artifactId: "artifact-api",
       kind: "text_fixture",
       storageRef: artifactPath,
       byteSize: Buffer.byteLength(artifactBody),
       sha256: `sha256:${"b".repeat(64)}`,
+    });
+    await store.saveArtifactReference(createdBody.runId, "api-test-worker", {
+      artifactId: "artifact-outside-root",
+      kind: "text_fixture",
+      storageRef: outsideArtifactPath,
+      byteSize: 18,
+      sha256: `sha256:${"c".repeat(64)}`,
     });
     await store.saveEvidenceMetadata(createdBody.runId, "api-test-worker", {
       evidenceId: "evidence-api",
@@ -175,7 +189,7 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const exported = JSON.parse(jsonExportText) as { summary: { checkCount: number }; artifacts: Array<{ artifactId: string }>; report: unknown };
     assert.equal(exported.summary.checkCount, 1);
     assert.deepEqual(exported.report, storedReport);
-    assert.deepEqual(exported.artifacts.map((item) => item.artifactId), ["artifact-api"]);
+    assert.deepEqual(exported.artifacts.map((item) => item.artifactId), ["artifact-api", "artifact-outside-root"]);
     assert.doesNotMatch(jsonExportText, /SECRET_SENTINEL|storageRef|validator-api-artifacts/);
 
     const htmlExport = await fetch(`${base}/v1/runs/${createdBody.runId}/export.html`, { headers: headers(teamAToken) });
@@ -190,6 +204,9 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     const artifact = await fetch(`${base}/v1/artifacts/artifact-api`, { headers: headers(teamAToken) });
     assert.equal(artifact.status, 200);
     assert.equal(await artifact.text(), artifactBody);
+    const outsideArtifact = await fetch(`${base}/v1/artifacts/artifact-outside-root`, { headers: headers(teamAToken) });
+    assert.equal(outsideArtifact.status, 500);
+    assert.deepEqual(await body<{ error: unknown }>(outsideArtifact), { error: { code: "internal_error", message: "request failed" } });
 
     const teamAList = await body<{ runs: Array<{ runId: string }> }>(await fetch(`${base}/v1/runs`, { headers: headers(teamAToken) }));
     const teamBList = await body<{ runs: unknown[] }>(await fetch(`${base}/v1/runs`, { headers: headers(teamBToken) }));
@@ -219,5 +236,6 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     await admin.end();
     await rm(artifacts, { recursive: true, force: true });
+    await rm(outsideArtifacts, { recursive: true, force: true });
   }
 });

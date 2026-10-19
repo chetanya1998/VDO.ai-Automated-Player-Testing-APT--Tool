@@ -125,6 +125,7 @@ function fakeBrowserDependencies(behavior: "healthy" | "new_page_error" | "crash
       const context = {
         addInitScript: async () => undefined,
         route: async (_pattern: string, handler: typeof routeHandler) => { routeHandler = handler; },
+        routeWebSocket: async () => undefined,
         newPage: async () => {
           if (behavior === "new_page_error") throw new Error("injected page creation failure");
           return page;

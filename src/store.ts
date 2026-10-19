@@ -282,6 +282,15 @@ export class PostgresStore {
     };
   }
 
+  async isReady(): Promise<boolean> {
+    try {
+      await this.pool.query("SELECT 1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async enqueueRun(input: EnqueueRunInput): Promise<EnqueueRunResult> {
     return transaction(this.pool, async (client) => {
       const teamId = input.teamId ?? "system";

@@ -4,8 +4,8 @@ import { DOM_TRACKER_INIT_SCRIPT } from "./dom.js";
 import { performArticleActions, type ArticleAction } from "./articles.js";
 import {
   PRODUCTION_EGRESS_BOUNDARY,
+  NetworkUrlGuard,
   UrlPolicyError,
-  assertApprovedUrl,
   createBrowserUrlPolicy,
 } from "./url-policy.js";
 
@@ -70,6 +70,11 @@ export interface BrowserRunResult {
 
 export interface BrowserRunnerDependencies {
   launch(options: LaunchOptions): Promise<Browser>;
+}
+
+export function browserProcessEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const allowed = ["HOME", "LANG", "LC_ALL", "LD_LIBRARY_PATH", "LOCALAPPDATA", "PATH", "SystemRoot", "TEMP", "TMP", "TMPDIR", "TZ", "USERPROFILE", "XDG_RUNTIME_DIR"];
+  return Object.fromEntries(allowed.flatMap((name) => source[name] === undefined ? [] : [[name, source[name]!]]));
 }
 
 const defaultDependencies: BrowserRunnerDependencies = {
@@ -137,7 +142,8 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
   return async function runBrowser(options: BrowserRunOptions): Promise<BrowserRunResult> {
     validateOptions(options);
     const policy = createBrowserUrlPolicy(options.approvedOrigins, options.allowRemoteOrigins ?? false);
-    const target = assertApprovedUrl(options.targetUrl, policy);
+    const guard = new NetworkUrlGuard(policy);
+    const target = await guard.assertAllowed(options.targetUrl);
     const startedAt = new Date();
     const started = performance.now();
     const observations: BrowserObservation[] = [];
@@ -167,6 +173,7 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
         executablePath: options.browserExecutablePath,
         headless: true,
         timeout: options.totalTimeoutMs,
+        env: browserProcessEnvironment(),
       });
       browserVersion = browser.version();
       context = await browser.newContext({ viewport: options.viewport, serviceWorkers: "block", ...(options.deviceEmulation ?? {}) });
@@ -174,13 +181,24 @@ export function createBrowserRunner(dependencies: BrowserRunnerDependencies = de
       await context.addInitScript(DOM_TRACKER_INIT_SCRIPT);
       await context.route("**/*", async (route) => {
         try {
-          assertApprovedUrl(route.request().url(), policy);
+          await guard.assertAllowed(route.request().url());
           await route.continue();
         } catch (error) {
           const url = route.request().url();
           blockedUrls.push(url);
           observations.push({ kind: "egress_blocked", atMs: elapsed(started), url, detail: error instanceof Error ? error.message : String(error) });
           await route.abort("blockedbyclient");
+        }
+      });
+      await context.routeWebSocket("**/*", async (socket) => {
+        try {
+          await guard.assertAllowed(socket.url());
+          socket.connectToServer();
+        } catch (error) {
+          const url = socket.url();
+          blockedUrls.push(url);
+          observations.push({ kind: "egress_blocked", atMs: elapsed(started), url, detail: error instanceof Error ? error.message : String(error) });
+          await socket.close({ code: 1008, reason: "blocked by validator egress policy" });
         }
       });
       page = await context.newPage();

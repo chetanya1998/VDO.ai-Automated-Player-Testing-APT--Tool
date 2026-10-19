@@ -7,6 +7,7 @@ Configure the database and one or more internal identities, then start the servi
 ```powershell
 $env:DATABASE_URL = "postgresql://validator:password@127.0.0.1:5432/player_validator"
 $env:VDO_VALIDATOR_API_IDENTITIES = '[{"token":"replace-with-at-least-16-characters","userId":"alice","teamId":"qa"}]'
+$env:VDO_VALIDATOR_ARTIFACT_ROOT = "C:\validator-artifacts"
 pnpm api
 ```
 
@@ -16,6 +17,8 @@ Requests use `Authorization: Bearer <token>`. Creating a run also requires an `I
 
 | Method | Path | Result |
 |---|---|---|
+| `GET` | `/health/live` | Process liveness; no authentication required |
+| `GET` | `/health/ready` | PostgreSQL readiness; no authentication required |
 | `POST` | `/v1/runs` | Validate and enqueue `{ profile, targetUrl, deviceId }` |
 | `POST` | `/v1/batches` | Validate and enqueue bounded `{ profile, targetUrls, deviceIds }` items |
 | `GET` | `/v1/runs` | List the team's 100 newest runs |
@@ -31,3 +34,5 @@ An identical team/key submission returns the original run. Reusing the key with 
 Report exports require a final report and otherwise return `409 report_not_ready`. They use the same team scope as report inspection. See [Technical report exports](report-export.md) for contents and redaction behavior.
 
 Batch submissions keep mixed admission results, use one independent run deadline per accepted URL/device item, and never retry automatically. See [Bounded URL batches](batches.md) for limits, status fields and retry behavior.
+
+Artifact downloads are confined to `VDO_VALIDATOR_ARTIFACT_ROOT` even when a stored database reference points elsewhere. See [Internal pilot operations](operations.md) for deployment and recovery gates.

@@ -22,6 +22,7 @@ async function main(): Promise<void> {
     store: new PostgresStore(pool),
     authenticate: createBearerAuthenticator(identities()),
     dashboardRoot: process.cwd(),
+    artifactRoot: required("VDO_VALIDATOR_ARTIFACT_ROOT"),
   });
   const port = await listenLocal(server, process.env.PORT === undefined ? 8787 : Number(process.env.PORT));
   console.log(`Validator API listening on http://127.0.0.1:${port}`);

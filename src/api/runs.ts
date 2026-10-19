@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
+import { isAbsolute, relative, resolve } from "node:path";
 import { assertApprovedUrl, createBrowserUrlPolicy, UrlPolicyError } from "../browser/url-policy.js";
 import type { JsonValue } from "../contracts.js";
 import { snapshotProfile } from "../profile.js";
@@ -24,6 +25,7 @@ export interface RunApiOptions {
   store: PostgresStore;
   authenticate(request: IncomingMessage): ApiIdentity | null;
   dashboardRoot?: string;
+  artifactRoot?: string;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -167,6 +169,16 @@ async function createRun(request: IncomingMessage, response: ServerResponse, ide
 
 async function handle(request: IncomingMessage, response: ServerResponse, options: RunApiOptions): Promise<void> {
   response.setHeader("x-content-type-options", "nosniff");
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  if (request.method === "GET" && url.pathname === "/health/live") {
+    json(response, 200, { status: "ok" });
+    return;
+  }
+  if (request.method === "GET" && url.pathname === "/health/ready") {
+    const ready = await options.store.isReady();
+    json(response, ready ? 200 : 503, { status: ready ? "ready" : "unavailable" });
+    return;
+  }
   if (options.dashboardRoot !== undefined && await serveDashboard(request, response, options.dashboardRoot)) return;
   const identity = options.authenticate(request);
   if (identity === null) {
@@ -174,8 +186,6 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
     json(response, 401, { error: { code: "unauthorized", message: "valid bearer authentication is required" } });
     return;
   }
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
-
   if (request.method === "POST" && url.pathname === "/v1/runs") {
     await createRun(request, response, identity, options.store);
     return;
@@ -228,8 +238,14 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
   if (request.method === "GET" && requestedArtifactId !== null) {
     const artifact = await options.store.getArtifactForTeam(identity.teamId, requestedArtifactId);
     if (artifact === null) throw new ApiError(404, "not_found", "artifact was not found");
-    const details = await stat(artifact.storageRef);
+    const storagePath = await realpath(resolve(artifact.storageRef));
+    if (options.artifactRoot !== undefined) {
+      const withinRoot = relative(await realpath(resolve(options.artifactRoot)), storagePath);
+      if (withinRoot.startsWith("..") || isAbsolute(withinRoot)) throw new Error("artifact storage reference is outside the configured root");
+    }
+    const details = await stat(storagePath);
     if (!details.isFile()) throw new Error("artifact storage reference is not a file");
+    if (details.size !== artifact.byteSize) throw new Error("artifact size does not match its stored metadata");
     response.writeHead(200, {
       "content-type": "application/octet-stream",
       "content-length": details.size,
@@ -238,7 +254,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
       "x-artifact-kind": artifact.kind,
       "x-artifact-sha256": artifact.sha256,
     });
-    await pipeline(createReadStream(artifact.storageRef), response);
+    await pipeline(createReadStream(storagePath), response);
     return;
   }
   throw new ApiError(404, "not_found", "endpoint was not found");

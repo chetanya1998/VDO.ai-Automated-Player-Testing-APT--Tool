@@ -52,7 +52,7 @@ pnpm test
 
 Copy your local PostgreSQL connection strings into ignored `.env.local`, export them into the process, then apply the migration with `DATABASE_URL` or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
 
-Start the authenticated local API with `pnpm api` after setting `DATABASE_URL` and `VDO_VALIDATOR_API_IDENTITIES`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md), [Local validation dashboard](docs/dashboard.md), and [Bounded URL batches](docs/batches.md).
+Start the authenticated local API with `pnpm api` after setting `DATABASE_URL`, `VDO_VALIDATOR_API_IDENTITIES`, and `VDO_VALIDATOR_ARTIFACT_ROOT`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md), [Local validation dashboard](docs/dashboard.md), and [Bounded URL batches](docs/batches.md).
 
 Validate the fixture profile:
 
@@ -113,7 +113,7 @@ tests/                   Contract, fixture, and runner checks
 
 ## Safety boundary
 
-The runner installs a browser-context route before navigation and permits only origins explicitly named by the selected profile. Remote runs require a production profile. Unrestricted remote execution is disabled; WebSocket controls, DNS controls and deployment network policy remain scheduled for Task 20.
+The runner installs HTTP and WebSocket routes before navigation, permits only profile origins, rejects remote hosts that resolve to non-public IPv4 or IPv6 addresses, pins resolved address sets for the run, and removes backend credentials from the Chromium environment. Remote runs require a production profile. Unrestricted remote execution remains disabled because the required separate browser network namespace and deployed egress tests are not available. See [Internal pilot operations](docs/operations.md).
 
 The synthetic fixtures never contact live advertising demand. They are development inputs, not publisher conformance evidence.
 
