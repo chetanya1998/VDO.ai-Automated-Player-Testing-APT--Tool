@@ -1,51 +1,100 @@
 # VDO.AI Automated Player Testing (APT) Tool
 
-An automated validator for VDO.AI player integrations. The project is being built as a deterministic evidence pipeline: run a page in an isolated browser, capture what happened, apply explicit checks, and report likely root causes without inventing missing evidence.
+The APT Tool checks whether a VDO.AI player is installed and behaving correctly on a publisher page. A user submits an approved page, the tool observes the player in a controlled browser, evaluates 23 defined test cases, and produces a report with evidence and likely causes.
 
-## Current status
+The product is designed for QA, Ad Operations, Support, Player Engineering, and publisher implementation teams. It reduces repeated manual inspection while keeping every conclusion traceable to captured evidence.
 
-Tasks 01–19 and 22–29 are implemented:
+> **Current status — 20 October 2026:** all 23 case rules and the planned local product functions are implemented. The application is still in internal-pilot status. It has not completed production deployment acceptance or validation against an approved live publisher corpus, so it does not yet claim production accuracy or live publisher certification.
 
-- strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
-- a fixture-only integration profile;
-- twelve local synthetic publisher scenarios covering healthy and broken player behavior;
-- a bounded Playwright Chromium runner with isolated contexts, navigation and total deadlines, partial observations, cleanup, and crash classification;
-- structured browser evidence for requests, responses, failures, logger payloads, console errors, frames, player references, and bounded screenshots;
-- credential and query-value redaction, approved response-body limits, distinct evidence IDs, and explicit collection gaps;
-- five-field logger parsing with versioned aliases, field diagnostics, and physical-load dependency consistency;
-- deterministic profile snapshots and normalized evidence with retained duplicates, raw artifact references, timing, article scope, and separate player instances;
-- explicit site/domain/tag/product mappings with supported suffix variants, multiple-tag identities, and unverified candidate suggestions;
-- evidence-backed loader, per-tag duplicate, anchor, external/bootstrap script, DOM placement, floating, and lifecycle checks;
-- draft cold-cache script timing bands plus logger request-duration and raw event-gap measurements;
-- TC-4 logger presence/status checks and a schema-versioned JSON report containing all TC-1 through TC-23 outcomes, evidence, coverage, verdict counts, and separate execution errors;
-- versioned TC-5/6/7/9/22 lifecycle, required-event, pageview-count, eligible-ad-request, and per-article count rules for served and no-ad paths;
-- versioned TC-11/12 expected-block, error-code, event-window, and product-specific dependency rules that preserve recovery/failure evidence without inferring an ad blocker;
-- bounded VAST XML plus GAM, Prebid, and reseller response adapters with TC-9/10 initiation, no-fill, deadline, wrapper-chain, and first-gap classification;
-- versioned auction-cycle rules for configured parallel stages, waterfalls, dependency timeouts, required fallbacks, and refresh intervals, reported through TC-10 with the violated policy version and evidence;
-- bounded event-time and interval visibility samples with geometry, CSS ancestors, clipping, occlusion, transforms, and fixed/sticky transitions, plus TC-8/10/14 rules for formation and continuous exposure;
-- confirmed-policy click/scroll article transitions, main-frame full and same-document URL epochs, request-start strict URL attribution, per-article/tag loaded and Pageview counts, article-wide Website Pageview limits, and three-distinct-article coverage for TC-7/17/21/22/23;
-- sequential named desktop/mobile matrix execution with viewport and CSS measurements, touch emulation, recorded playback taps, TC-16 block coverage, explicit real-iOS gaps, and attributable iOS/Safari evidence import;
-- deterministic RCA ranking that groups dependent symptoms under the earliest supported failure, retains independent demand/configuration findings, cites every cause, and separates confidence, category, owner suggestion, and next checks;
-- a verified PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references;
-- a loopback-only authenticated run API with team-scoped create, list, status, report and artifact access plus persisted idempotency;
-- a responsive local dashboard for fixture submission, bounded status polling, team history, health and RCA summaries, TC-1 through TC-23 coverage, authenticated artifacts, and a filterable evidence timeline;
-- authenticated redacted JSON and self-contained offline HTML technical-report exports with all persisted checks, evidence summaries, findings, timings, environment/profile versions and safe artifact references;
-- authenticated bounded URL/device batches with persisted mixed admission results, independent run deadlines, explicit retries, per-item report links and aggregate case/device completeness;
-- an optional deadline-bounded backend logger client with scoped bearer authentication, cursor pagination, rate-limit handling and ingestion watermark metadata; live access and correlation remain unverified;
-- exact, ambiguous and unmatched browser/backend correlation using confirmed shared-ID mappings, with timing proximity excluded from identity proof and unresolved identity blocking high-confidence backend RCA;
-- opt-in bounded AI explanations over redacted findings and selected evidence, with approved-model enforcement, cited evidence validation and deterministic fallback that cannot change verdicts;
-- explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
+## What the application does
 
-Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
+The application can:
 
-## Requirements
+- accept a single approved page or a bounded batch of page and device combinations;
+- test pages in an isolated Chromium session;
+- inspect player scripts, tags, DOM placement, logger events, dependencies, ads, layout, viewability, devices, and article transitions;
+- retain screenshots, sanitized network evidence, event timelines, and report references;
+- classify results as `PASS`, `FAIL`, `WARNING`, `UNKNOWN`, or `NOT APPLICABLE`;
+- identify the earliest evidence-supported failure and suggest the most likely owning team;
+- show team-scoped run history in a dashboard;
+- export redacted JSON and self-contained HTML reports;
+- optionally compare browser evidence with a backend logger when an approved shared identifier exists;
+- optionally create an AI-written explanation without allowing AI to change test results.
 
-- Node.js 24 or newer
-- pnpm
-- A Chromium-based browser for the optional live smoke test
-- PostgreSQL for Task 15 migration and queue integration tests
+The tool does not guess missing facts. When the page, policy, device, or evidence is insufficient, it reports an explicit coverage gap.
 
-## Setup
+## Who uses it
+
+| User | Typical use |
+| --- | --- |
+| QA | Run repeatable release and regression checks across desktop and mobile profiles |
+| Ad Operations | Confirm the expected tag, domain, product, ad-request path, and configuration |
+| Publisher Support | Investigate why a player is missing, blocked, slow, hidden, or not monetizing |
+| Player Engineering | Inspect event sequence, dependencies, runtime errors, lifecycle, and timing |
+| Measurement teams | Review formation, viewport exposure, and viewable-impression evidence |
+| Product and leadership | Track pilot coverage, accuracy, turnaround time, and release readiness |
+
+## How a validation works
+
+```mermaid
+flowchart LR
+    A[User selects approved URL and profile] --> B[API authenticates and creates run]
+    B --> C[Queue worker leases job]
+    C --> D[Isolated browser opens page]
+    D --> E[Evidence is captured and redacted]
+    E --> F[23 deterministic checks run]
+    F --> G[Probable causes are ranked]
+    G --> H[Dashboard and exports show results]
+```
+
+1. The user signs in with a team token.
+2. The user selects an approved page, integration profile, and device.
+3. The application creates a bounded job with a deadline.
+4. A controlled browser loads the page and records permitted evidence.
+5. The rule engine compares observed behavior with the approved profile.
+6. The application stores results, evidence references, and likely causes.
+7. The dashboard presents the result and offers JSON or offline HTML export.
+
+## Application architecture
+
+The application uses separate responsibilities so that an untrusted publisher page cannot access internal credentials or databases.
+
+```mermaid
+flowchart TB
+    U[QA or Support user] -->|HTTPS| UI[Dashboard and authenticated API]
+    UI --> DB[(PostgreSQL)]
+    UI --> ART[(Protected artifact storage)]
+    W[Queue worker] --> DB
+    W -->|bounded job instructions| BR[Isolated browser service]
+    BR -->|approved public origins only| WEB[Publisher and player resources]
+    BR -->|sanitized evidence| W
+    W --> ART
+    COL[Trusted logger collector] -->|approved backend API| LOG[Backend logger]
+    COL --> DB
+    UI --> REP[Reports and evidence timeline]
+```
+
+| Component | Purpose |
+| --- | --- |
+| Dashboard | Submit tests and inspect history, coverage, failures, evidence, and probable causes |
+| Authenticated API | Enforce identity, team boundaries, run admission, status, reports, and artifact access |
+| PostgreSQL | Store profiles, runs, queue state, check results, findings, and artifact references |
+| Queue worker | Claim jobs, enforce deadlines and retries, and coordinate browser execution |
+| Browser service | Open the publisher page with real Chromium and collect bounded evidence |
+| Rule engine | Apply versioned, deterministic rules to the captured evidence |
+| RCA engine | Group dependent symptoms and rank supported causes without inventing evidence |
+| Artifact storage | Retain bounded screenshots, sanitized network evidence, and report artifacts |
+| Logger collector | Optionally retrieve authorized server-side logger records without sharing its credential |
+| Report exporter | Create redacted JSON and self-contained HTML reports |
+| Pilot evaluator | Measure accuracy, latency, completeness, cost coverage, and release gates from a labeled corpus |
+
+The repository contains the application logic, local API, dashboard, PostgreSQL queue, browser runner, rule engine, reports, and pilot evaluator. The separate production browser service, long-running worker process, and trusted collector deployment boundaries remain part of the Coolify deployment work.
+
+## How to use the application
+
+### Current internal/local workflow
+
+Requirements: Node.js 24 or newer, `pnpm`, PostgreSQL, and an installed Chromium browser for browser-level testing.
 
 ```bash
 pnpm install
@@ -53,86 +102,191 @@ pnpm typecheck
 pnpm test
 ```
 
-Copy your local PostgreSQL connection strings into ignored `.env.local`, export them into the process, then apply the migration with `DATABASE_URL` or run the real queue acceptance suite with `TEST_DATABASE_URL`. See [PostgreSQL persistence and worker](docs/persistence.md). Tests skip those database cases when no disposable PostgreSQL database is configured.
-
-Start the authenticated local API with `pnpm api` after setting `DATABASE_URL`, `VDO_VALIDATOR_API_IDENTITIES`, and `VDO_VALIDATOR_ARTIFACT_ROOT`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md), [Local validation dashboard](docs/dashboard.md), and [Bounded URL batches](docs/batches.md).
-
-Production-profile API admission remains disabled unless the deployed environment explicitly enables it with a fresh acceptance document covering every required security and recovery control, the exact profile hash and every approved HTTPS origin. See [Internal pilot operations](docs/operations.md) and [Deployment boundary](deploy/README.md).
-
-Validate the fixture profile:
+Set `DATABASE_URL`, `VDO_VALIDATOR_API_IDENTITIES`, and `VDO_VALIDATOR_ARTIFACT_ROOT`, then start the application:
 
 ```bash
-pnpm validate:fixture-profile
+pnpm api
 ```
 
-Generate a report from a real approved page:
+Open `http://127.0.0.1:8787`, enter an authorized team token, submit an approved fixture profile and URL, choose a device, and follow the run until its report becomes available.
 
-```powershell
-pnpm report -- "https://approved.example/article" "config/profiles/production.json" "reports/run.json" `
-  --browser "C:\Program Files\Google\Chrome\Application\chrome.exe" `
-  --aliases "config/production-event-aliases.json" `
-  --timing "config/production-timing.json" `
-  --event-rules "config/production-event-rules.json" `
-  --runtime-policy "config/production-runtime-policy.json" `
-  --demand-policy "config/production-demand-policy.json" `
-  --auction-rules "config/production-auction-rules.json" `
-  --visibility-policy "config/production-visibility-policy.json" `
-  --article-policy "config/production-article-policy.json" `
-  --device-policy "config/production-devices.json" `
-  --rca-rules "config/production-rca-rules.json"
-```
+From the dashboard a user can:
 
-The report command requires a `production` profile plus confirmed event aliases, timing, event rules, runtime policy, demand policy, auction rules, visibility, article, device, and RCA policies for that profile. Article actions are limited to configured clicks or scrolls, must remain on the target origin, and wait for an exact expected URL. The target must appear exactly in `site.approvedUrls`. List every required page, player, logger, and CDN origin in `site.approvedResourceOrigins`; requests to any other origin are blocked and recorded. Demand parsing uses captured bounded bodies and never follows wrapper URLs. Visibility is sampled during the observation window and at logger-request time. Output files are created once and never overwritten.
+1. submit a single run or bounded batch;
+2. monitor queued, running, completed, failed, or timed-out work;
+3. review case coverage and verdict totals;
+4. inspect the evidence timeline and probable causes;
+5. download redacted JSON or offline HTML.
 
-Run both enabled desktop and mobile profiles with `pnpm matrix --` using the same options and an output directory in place of the report file. It creates one complete TC-1 through TC-23 report per device and `matrix.json`. See [desktop, mobile and real-iOS validation](docs/device-validation.md) for the hardware evidence procedure and `--real-device-evidence` format.
+See the [complete non-technical product guide](docs/product-guide.md) for roles, result interpretation, limitations, and the end-to-end user journey. Technical operators can use the [API guide](docs/api.md), [dashboard guide](docs/dashboard.md), [batch guide](docs/batches.md), and [report export guide](docs/report-export.md).
 
-After collecting the agreed QA-labeled corpus and its evidence-backed readiness record, calculate the pilot metrics and release gates with `pnpm pilot:evaluate -- observations.json results.json`. See [Pilot release results](docs/pilot-results.md) and [Pilot support runbook](docs/support-runbook.md). The current corpus is empty, so no accuracy, latency or release claim is made.
+### Production workflow after deployment acceptance
 
-AI explanations are optional and require an explicitly approved provider policy, credential and user request. See [Optional AI explanations](docs/ai-explanations.md). No production model configuration is committed.
+1. An administrator approves the site, exact page URLs, expected tags, resource origins, device policy, and rule versions.
+2. Deployment owners prove browser isolation, network restrictions, backup recovery, secret separation, and monitoring.
+3. An operator submits an approved live URL from the dashboard or API.
+4. The isolated browser service performs the run.
+5. QA or Support reviews the report and assigns supported findings to the suggested owner.
+6. Results from the labeled pilot corpus feed the release evaluator.
 
-Legacy regression tests still use the earlier development fixtures and browser harness. The report command rejects fixture-only profiles, and fixture results are not accepted as product evidence. To run the optional real-browser regression smoke test, provide an installed Chromium executable:
+Remote publisher execution stays disabled until the production acceptance document matches the deployed browser image, profiles, and origins.
 
-```powershell
-$env:VDO_VALIDATOR_BROWSER = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-pnpm test
-```
+## The 23 test cases
 
-## Repository structure
+| Case | Plain-language check |
+| --- | --- |
+| TC-1 | Is the correct VDO.AI tag and loader script present and successfully loaded? |
+| TC-2 | Did the loader script finish within the approved timing bands? |
+| TC-3 | Did each tag load only once without duplicate scripts or anchors? |
+| TC-4 | Are browser logger requests being sent successfully? |
+| TC-5 | Does the observed logger event journey match an approved served-ad or no-ad flow? |
+| TC-6 | Are all events required for this page, product, and outcome present? |
+| TC-7 | Is Pageview emitted once per active tag and Website Pageview within its allowed count? |
+| TC-8 | Is the player correctly classified above or below the fold, and does it report entering view? |
+| TC-9 | Does an eligible player initiate the expected ad request? |
+| TC-10 | Where does the ad-serving chain first stop, and was viewable exposure achieved? |
+| TC-11 | Were player, inline, autoplay, IMA, agent, device, URL, or coded errors blocked as expected? |
+| TC-12 | Did every dependency required by the selected product load successfully? |
+| TC-13 | Are the correct anchor and external script present in the intended page location? |
+| TC-14 | Did the player form correctly, and is publisher CSS hiding, clipping, or covering it? |
+| TC-15 | How long did logger requests take, and where are repeated delays visible? |
+| TC-16 | Does the integration behave correctly on the required desktop and mobile profiles? |
+| TC-17 | Do logger tag, domain, page URL, and dependency values agree with observed page evidence? |
+| TC-18 | Does the approved tag belong to the configured domain and product? |
+| TC-19 | Does the dependency build stay consistent throughout one physical page load? |
+| TC-20 | Are logger event names and the five required fields present and valid? |
+| TC-21 | Does each logger event carry the article URL that was current when the request began? |
+| TC-22 | Does each tag emit one loaded and one Pageview event for each article? |
+| TC-23 | Does validation remain correct through at least three infinite-scroll or SPA articles? |
 
-```text
-config/                 Fixture-only profiles, event aliases, and site identity mappings
-docs/                   Integration contract and implementation plan
-src/browser/            Bounded browser runner, evidence capture, and URL policy
-src/evidence/           Deterministic capture normalization
-src/evidence/correlate.ts Verified shared-ID browser/backend correlation
-src/ai/                Optional bounded explanation provider integration
-src/logger/             Five-field browser logger payload parsing
-src/logger/client.ts    Optional bounded backend logger collection
-src/profile.ts          Deterministic profile snapshots
-src/profile/            Approved site/tag/product identity resolution
-src/rules/              Deterministic evidence-backed validator rules
-src/rca/                Evidence-backed probable-cause ranking
-src/contracts.ts        Runtime-validated shared contracts
-src/report/             Versioned deterministic report assembly
-src/pilot/              Pilot metrics and release-gate evaluation
-src/store.ts             PostgreSQL run, evidence and queue persistence
-src/worker.ts            Single-job leased worker
-web/                     Responsive run dashboard and evidence timeline
-db/migrations/           Versioned PostgreSQL schema
-src/cli.ts              Profile validation and real-page report CLI
-tests/fixtures/         Synthetic publisher pages and deterministic local endpoints
-tests/                   Contract, fixture, and runner checks
-```
+Every result retains expected and observed values, evidence references, applicability, and limitations. Detailed acceptance scenarios are in [case coverage](docs/plan/CASE-COVERAGE.md).
 
-## Safety boundary
+## Result meanings
 
-The runner installs HTTP and WebSocket routes before navigation, permits only profile origins, rejects remote hosts that resolve to non-public IPv4 or IPv6 addresses, pins resolved address sets for the run, and removes backend credentials from the Chromium environment. Remote runs require a production profile. Unrestricted remote execution remains disabled because the required separate browser network namespace and deployed egress tests are not available. See [Internal pilot operations](docs/operations.md).
+| Result | Meaning |
+| --- | --- |
+| `PASS` | The required behavior was observed with sufficient evidence |
+| `FAIL` | Evidence shows that a required rule was violated |
+| `WARNING` | The run observed a risk or provisional threshold breach that may not be a defect |
+| `UNKNOWN` | The available evidence or approved policy is insufficient for a conclusion |
+| `NOT APPLICABLE` | The rule does not apply to the selected product, device, or scenario |
 
-The synthetic fixtures never contact live advertising demand. They are development inputs, not publisher conformance evidence.
+Demand problems, publisher implementation problems, runtime/browser problems, configuration problems, and incomplete coverage remain separate. A no-fill response is not automatically blamed on publisher implementation.
+
+## Functional coverage
+
+- Single-page and bounded batch submission
+- Desktop and mobile Chromium profiles
+- Import path for attributable real iOS/Safari evidence
+- Multi-tag and multi-product profiles
+- Three-article infinite-scroll and SPA journeys
+- Network, DOM, logger, timing, layout, visibility, demand, auction, and dependency evidence
+- Expected-block and recovery classification
+- Bounded VAST, GAM, Prebid, and reseller response interpretation
+- Exact browser/backend correlation when a confirmed shared key exists
+- Team-scoped persistence and artifact authorization
+- Evidence timeline and probable-cause ranking
+- Redacted JSON and offline HTML exports
+- Optional, policy-controlled AI explanations
+- Pilot accuracy, latency, completeness, cost, and release-gate calculation
 
 ## Development roadmap
 
-The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
+The implementation was organized into 29 small tasks and is grouped here by product outcome:
 
-Task 21 measurement tooling and its mandatory CASES manifest are implemented, but the release decision is blocked by the missing labeled corpus, confirmed decisions and Task 20 deployment acceptance.
+| Phase | Tasks | Outcome | Status |
+| --- | --- | --- | --- |
+| Foundation | 01–03 | Supported integration, shared contracts, and controlled page scenarios | Implemented locally |
+| Browser and evidence | 04–06, 22–24 | Bounded Chromium runs, evidence, logger parsing, identities, normalization, and timing | Implemented locally |
+| Core validation | 07–08, 11–14, 25–27, 29 | All 23 checks, demand/auction/layout/article/device rules, reports, and RCA | Implemented locally |
+| Application | 15–18, 28 | PostgreSQL queue, authenticated API, dashboard, exports, and batch validation | Implemented locally |
+| Optional intelligence | 09–10, 19 | Backend verification, exact correlation, and bounded AI explanation | Implemented locally; live integrations unverified |
+| Deployment hardening | 20 | Network safety, admission controls, health, credential separation, and recovery | Application hardening implemented; deployment acceptance pending |
+| Pilot and release | 21 | Labeled-corpus evaluation and evidence-backed release decision | Evaluator implemented; real pilot inputs pending |
 
+Next executable deployment packages are:
+
+1. configurable container bind address;
+2. production API container;
+3. fixture-only Coolify environment;
+4. production worker entrypoint;
+5. separate Chromium browser service;
+6. browser-host network isolation;
+7. trusted backend logger collector;
+8. production Coolify resources and secrets;
+9. backup, restore, monitoring, and rollback drills;
+10. deployment acceptance and approved live canary.
+
+The authoritative task order and current handoff are in [TASKS.md](docs/plan/TASKS.md) and [STATUS.md](docs/plan/STATUS.md).
+
+## Deployment strategy
+
+Deployment uses two controlled stages.
+
+### Stage 1: internal fixture environment
+
+Deploy the dashboard/API, PostgreSQL, and protected artifact storage on Coolify. Validate authentication, routing, persistence, health, backup, restore, and fixture-only reports. Keep remote execution disabled.
+
+### Stage 2: production remote validation
+
+Deploy separately privileged API, worker, browser, and logger-collector services. Place the browser on a separate server with no database, API, artifact, logger, host, Docker, cloud, or Coolify credentials. Permit only approved public destinations and deny private, loopback, link-local, metadata, and control-plane networks.
+
+```mermaid
+flowchart LR
+    subgraph Control[Validator control server]
+      API[API and dashboard]
+      WORKER[Worker]
+      DB[(PostgreSQL)]
+      STORE[(Artifacts)]
+      LOGGER[Logger collector]
+    end
+    subgraph Sandbox[Separate browser server]
+      BROWSER[Disposable Chromium job]
+    end
+    USERS[Users] -->|HTTPS| API
+    API --> DB
+    WORKER --> DB
+    WORKER --> BROWSER
+    BROWSER -->|sanitized result only| WORKER
+    WORKER --> STORE
+```
+
+Production is enabled only after health, isolation, egress, secret-leak, cleanup, authorization, backup restoration, queue recovery, monitoring, and canary checks produce retained evidence. The exact procedure is in the [Coolify self-hosting plan](docs/coolify-self-hosting.md) and [internal pilot operations runbook](docs/operations.md).
+
+## Security and evidence principles
+
+- Only approved URLs and resource origins may be tested.
+- Remote destinations are checked after DNS resolution.
+- Private, loopback, link-local, and metadata destinations are rejected.
+- Chromium receives no database, API, or logger credentials.
+- Tokens and sensitive query values are redacted from retained evidence.
+- Team boundaries protect runs, reports, and artifacts.
+- Output is bounded by time, size, and count limits.
+- AI can explain existing findings but cannot create or alter verdicts.
+- Synthetic fixtures verify code behavior but do not prove live publisher correctness.
+
+## Documentation map
+
+- [Non-technical product guide](docs/product-guide.md)
+- [Coolify self-hosting plan](docs/coolify-self-hosting.md)
+- [Dashboard use](docs/dashboard.md)
+- [Report exports](docs/report-export.md)
+- [Bulk validation](docs/batches.md)
+- [Desktop, mobile, and real-iOS validation](docs/device-validation.md)
+- [PostgreSQL and worker](docs/persistence.md)
+- [Support and pilot runbook](docs/support-runbook.md)
+- [Pilot results and release status](docs/pilot-results.md)
+- [Detailed case coverage](docs/plan/CASE-COVERAGE.md)
+- [Implementation status](docs/plan/STATUS.md)
+
+## Known limitations
+
+- No approved production profile, live publisher corpus, or real demand capture has been supplied.
+- Production service separation and Coolify deployment acceptance are not complete.
+- Real iOS/Safari evidence is required for iOS-specific conclusions; Chromium emulation does not replace it.
+- Some thresholds and lifecycle rules remain draft until product owners confirm decisions D01–D14.
+- Backend logger verification requires authorized credentials and a confirmed shared identifier.
+- Tablet and connected-TV profiles are deferred.
+- Pilot accuracy, time saving, and release metrics cannot be claimed before the labeled corpus is evaluated.
+
+The product therefore remains safe by default: unavailable evidence produces `UNKNOWN` or incomplete coverage rather than a fabricated pass, failure, or cause.
