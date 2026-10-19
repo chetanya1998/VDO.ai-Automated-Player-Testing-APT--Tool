@@ -125,9 +125,35 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
       deviceId: "desktop",
       source: "browser_dom",
       capturedAt: new Date().toISOString(),
-      metadata: { artifactId: "artifact-api" },
+      metadata: {
+        artifactId: "artifact-api",
+        kind: "logger_request",
+        canonicalEvent: "loaded",
+        durationMs: 37,
+        authorization: "Bearer SECRET_SENTINEL",
+      },
     });
-    await store.complete(createdBody.runId, "api-test-worker", { reportId: "report-api", overallVerdict: "PASS" }, [{
+    const storedReport = {
+      reportId: "report-api",
+      overallVerdict: "FAIL",
+      checks: [{
+        testCaseId: "TC-5",
+        verdict: "FAIL",
+        category: "IMPLEMENTATION",
+        scope: { deviceId: "desktop", articleEpochId: "article-api", tagName: "v-api" },
+        expected: "complete logger sequence",
+        observed: "<script>globalThis.injected=true</script>",
+        evidenceIds: ["evidence-api"],
+      }],
+      diagnoses: [{
+        primarySymptom: { testCaseId: "TC-5" },
+        suggestedOwner: "Player engineering",
+        nextChecks: ["Inspect the logger sequence"],
+      }],
+      coverage: { totalCases: 23, policyVersion: "fixture-v1" },
+      limitations: ["Fixture-only result"],
+    };
+    await store.complete(createdBody.runId, "api-test-worker", storedReport, [{
       findingId: "finding-api",
       kind: "check",
       category: "NONE",
@@ -139,7 +165,26 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     assert.equal((await fetch(`${base}/v1/runs/${createdBody.runId}/report`, { headers: headers(teamBToken) })).status, 404);
     const report = await fetch(`${base}/v1/runs/${createdBody.runId}/report`, { headers: headers(teamAToken) });
     assert.equal(report.status, 200);
-    assert.deepEqual((await body<{ report: unknown }>(report)).report, { reportId: "report-api", overallVerdict: "PASS" });
+    assert.deepEqual((await body<{ report: unknown }>(report)).report, storedReport);
+
+    assert.equal((await fetch(`${base}/v1/runs/${createdBody.runId}/export.json`, { headers: headers(teamBToken) })).status, 404);
+    const jsonExport = await fetch(`${base}/v1/runs/${createdBody.runId}/export.json`, { headers: headers(teamAToken) });
+    assert.equal(jsonExport.status, 200);
+    assert.match(jsonExport.headers.get("content-disposition") ?? "", /attachment; filename="vdo-validator-.*\.json"/);
+    const jsonExportText = await jsonExport.text();
+    const exported = JSON.parse(jsonExportText) as { summary: { checkCount: number }; artifacts: Array<{ artifactId: string }>; report: unknown };
+    assert.equal(exported.summary.checkCount, 1);
+    assert.deepEqual(exported.report, storedReport);
+    assert.deepEqual(exported.artifacts.map((item) => item.artifactId), ["artifact-api"]);
+    assert.doesNotMatch(jsonExportText, /SECRET_SENTINEL|storageRef|validator-api-artifacts/);
+
+    const htmlExport = await fetch(`${base}/v1/runs/${createdBody.runId}/export.html`, { headers: headers(teamAToken) });
+    assert.equal(htmlExport.status, 200);
+    assert.match(htmlExport.headers.get("content-type") ?? "", /^text\/html/);
+    assert.match(htmlExport.headers.get("content-security-policy") ?? "", /default-src 'none'/);
+    const htmlExportText = await htmlExport.text();
+    assert.match(htmlExportText, /&lt;script&gt;globalThis\.injected=true&lt;\/script&gt;/);
+    assert.doesNotMatch(htmlExportText, /<script>|\b(?:src|href)\s*=/i);
 
     assert.equal((await fetch(`${base}/v1/artifacts/artifact-api`, { headers: headers(teamBToken) })).status, 404);
     const artifact = await fetch(`${base}/v1/artifacts/artifact-api`, { headers: headers(teamAToken) });
@@ -157,6 +202,8 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
       body: JSON.stringify({ profile: fixtureProfile, targetUrl: targetTwo, deviceId: "desktop" }),
     });
     assert.equal(queued.status, 201);
+    const queuedBody = await body<{ runId: string }>(queued.clone());
+    assert.equal((await fetch(`${base}/v1/runs/${queuedBody.runId}/export.json`, { headers: headers(teamAToken) })).status, 409);
     const saturated = await fetch(`${base}/v1/runs`, {
       method: "POST",
       headers: headers(teamBToken, "queue-full"),

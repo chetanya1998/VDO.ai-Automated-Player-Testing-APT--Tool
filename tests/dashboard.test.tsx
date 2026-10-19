@@ -51,7 +51,7 @@ test("run detail renders failure, unknown, demand, performance, evidence, and ac
     findings: [{ findingId: "cause-loader", kind: "diagnosis", category: "IMPLEMENTATION", verdict: "FAIL", evidenceIds: ["ev-loader"], payload: { cause: "loader missing" } }],
     artifacts: [{ artifactId: "artifact-har", kind: "sanitized_har", byteSize: 2048, sha256: `sha256:${"c".repeat(64)}` }],
   };
-  const html = renderToStaticMarkup(<RunDetail run={run} envelope={envelope} pollingPaused={false} onRefresh={() => undefined} onArtifact={async () => undefined} />);
+  const html = renderToStaticMarkup(<RunDetail run={run} envelope={envelope} pollingPaused={false} onRefresh={() => undefined} onArtifact={async () => undefined} onExport={async () => undefined} />);
   assert.match(html, />Issues</);
   assert.match(html, />Investigate demand</);
   assert.match(html, />Unknown</);
@@ -63,4 +63,6 @@ test("run detail renders failure, unknown, demand, performance, evidence, and ac
   assert.match(html, /href="#evidence-ev-loader"/);
   assert.match(html, /<select/);
   assert.match(html, /<button[^>]*>Refresh<\/button>/);
+  assert.match(html, /<button[^>]*>Export JSON<\/button>/);
+  assert.match(html, /<button[^>]*>Export HTML<\/button>/);
 });

@@ -85,6 +85,9 @@ textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-
 .run-hero h1 { font-size: clamp(1.5rem, 3vw, 3rem); margin: .8rem 0; overflow-wrap: anywhere; }
 .run-title { align-items: center; display: flex; gap: .8rem; }
 .run-title > span:last-child { color: #bed0cb; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
+.hero-actions .secondary { border: 1px solid #88a59c; }
+.hero-actions .secondary:disabled { cursor: not-allowed; opacity: .45; }
 .state-message { align-items: start; border-left: 5px solid var(--blue); display: grid; gap: .2rem; padding: 1rem 1.2rem; }
 .state-message span { color: var(--muted); }
 .state-timed_out, .state-errored { border-color: var(--red); background: #fff4f2; }
@@ -160,6 +163,7 @@ details { margin-top: .8rem; } summary { color: var(--blue); cursor: pointer; fo
   .side-stack { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .run-hero { display: grid; gap: 1rem; }
+  .hero-actions { justify-content: start; }
   .expected-grid { grid-template-columns: 1fr; }
   .timeline-heading { align-items: stretch; display: grid; }
   .compact-control { min-width: 0; }

@@ -4,7 +4,7 @@ An automated validator for VDO.AI player integrations. The project is being buil
 
 ## Current status
 
-Tasks 01–08, 11–17, 22–27, and 29 are implemented:
+Tasks 01–08, 11–18, 22–27, and 29 are implemented:
 
 - strict TypeScript contracts for runs, profiles, article epochs, evidence, checks, and reports;
 - a fixture-only integration profile;
@@ -29,6 +29,7 @@ Tasks 01–08, 11–17, 22–27, and 29 are implemented:
 - a verified PostgreSQL migration, bounded queue store and single-job lease worker for profile/run state, partial reports, evidence metadata, findings and external artifact references;
 - a loopback-only authenticated run API with team-scoped create, list, status, report and artifact access plus persisted idempotency;
 - a responsive local dashboard for fixture submission, bounded status polling, team history, health and RCA summaries, TC-1 through TC-23 coverage, authenticated artifacts, and a filterable evidence timeline;
+- authenticated redacted JSON and self-contained offline HTML technical-report exports with all persisted checks, evidence summaries, findings, timings, environment/profile versions and safe artifact references;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -119,5 +120,5 @@ The synthetic fixtures never contact live advertising demand. They are developme
 
 The detailed execution order, case coverage, decisions, and current handoff are in [`docs/plan/STATUS.md`](docs/plan/STATUS.md) and [`docs/plan/TASKS.md`](docs/plan/TASKS.md). The plan maps all 23 supplied validator cases into 29 executable tasks.
 
-Task 17 is complete and verified through the local dashboard, real HTTP and PostgreSQL. Task 18, shareable technical report export, is next.
+Task 18 is complete and verified through renderer checks plus authenticated HTTP and PostgreSQL acceptance. Task 28, bounded bulk URL validation, is next.
 

@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { assertApprovedUrl, createBrowserUrlPolicy, UrlPolicyError } from "../browser/url-policy.js";
 import type { JsonValue } from "../contracts.js";
 import { snapshotProfile } from "../profile.js";
+import { buildTechnicalReportExport, renderTechnicalReportHtml } from "../report/export.js";
 import { IdempotencyConflictError, PostgresStore, QueueCapacityError } from "../store.js";
 import type { ApiIdentity } from "./auth.js";
 import { serveDashboard } from "./static.js";
@@ -87,6 +88,28 @@ function artifactId(pathname: string): string | null {
   }
 }
 
+function exportRequest(pathname: string): { runId: string; format: "json" | "html" } | null {
+  const match = /^\/v1\/runs\/([^/]+)\/export\.(json|html)$/.exec(pathname);
+  if (match?.[1] === undefined || match[2] === undefined) return null;
+  try {
+    return { runId: decodeURIComponent(match[1]), format: match[2] as "json" | "html" };
+  } catch {
+    throw new ApiError(400, "invalid_path", "path identifier is invalid");
+  }
+}
+
+function attachment(response: ServerResponse, filename: string, contentType: string, body: string): void {
+  response.writeHead(200, {
+    "content-type": `${contentType}; charset=utf-8`,
+    "content-length": Buffer.byteLength(body),
+    "content-disposition": `attachment; filename="${filename}"`,
+    "cache-control": "private, no-store",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; img-src data:",
+    "x-content-type-options": "nosniff",
+  });
+  response.end(body);
+}
+
 function submissionHash(profileHash: string, targetUrl: string, deviceId: string): string {
   return `sha256:${createHash("sha256").update(JSON.stringify([profileHash, targetUrl, deviceId])).digest("hex")}`;
 }
@@ -148,6 +171,19 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
   }
   if (request.method === "GET" && url.pathname === "/v1/runs") {
     json(response, 200, { runs: await options.store.listRuns(identity.teamId) });
+    return;
+  }
+  const requestedExport = exportRequest(url.pathname);
+  if (request.method === "GET" && requestedExport !== null) {
+    const source = await options.store.getReportExportSource(identity.teamId, requestedExport.runId);
+    if (source === null) throw new ApiError(404, "not_found", "run was not found");
+    if (source.report.report === null) throw new ApiError(409, "report_not_ready", "a final report is required before export");
+    const exported = buildTechnicalReportExport(source);
+    if (requestedExport.format === "json") {
+      attachment(response, `vdo-validator-${requestedExport.runId}.json`, "application/json", `${JSON.stringify(exported, null, 2)}\n`);
+    } else {
+      attachment(response, `vdo-validator-${requestedExport.runId}.html`, "text/html", renderTechnicalReportHtml(exported));
+    }
     return;
   }
   const reportRunId = runId(url.pathname, "/report");

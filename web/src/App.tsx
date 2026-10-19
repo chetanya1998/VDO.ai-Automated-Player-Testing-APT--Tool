@@ -130,6 +130,25 @@ export function App() {
     }
   }
 
+  async function downloadReport(format: "json" | "html") {
+    if (token === null || selectedId === null) return;
+    try {
+      const response = await fetch(`/v1/runs/${encodeURIComponent(selectedId)}/export.${format}`, { headers: { authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const result = await responseJson<never>(response);
+        return result;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `vdo-validator-${selectedId}.${format}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Report download failed");
+    }
+  }
+
   if (token === null) {
     return (
       <main className="login-shell">
@@ -178,7 +197,7 @@ export function App() {
           {selected === null ? (
             <section className="panel welcome-panel"><p className="eyebrow">Run workspace</p><h1>Select a run to inspect its evidence.</h1><p>Choose a recent run or submit a controlled fixture. Pending, partial, failed and timed-out states stay visible.</p></section>
           ) : (
-            <RunDetail run={selected} envelope={report} pollingPaused={pollingPaused} onRefresh={() => setRefresh((value) => value + 1)} onArtifact={downloadArtifact} />
+            <RunDetail run={selected} envelope={report} pollingPaused={pollingPaused} onRefresh={() => setRefresh((value) => value + 1)} onArtifact={downloadArtifact} onExport={downloadReport} />
           )}
         </section>
       </div>

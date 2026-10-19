@@ -57,6 +57,17 @@ export interface TeamReport {
   artifacts: Array<Omit<ArtifactReferenceInput, "storageRef">>;
 }
 
+export interface TeamReportExportSource {
+  run: RunDetail;
+  report: TeamReport;
+  profile: {
+    profileId: string;
+    profileVersion: number;
+    profileHash: string;
+    snapshot: JsonValue;
+  };
+}
+
 export interface TeamArtifact {
   artifactId: string;
   kind: string;
@@ -363,6 +374,39 @@ export class PostgresStore {
         byteSize: Number(item.byte_size),
         sha256: item.sha256,
       })),
+    };
+  }
+
+  async getReportExportSource(teamId: string, runId: string): Promise<TeamReportExportSource | null> {
+    const result = await this.pool.query<{
+      run_id: string; target_url: string; device_id: string; execution_state: string;
+      created_at: Date; deadline_at: Date; started_at: Date | null; ended_at: Date | null;
+      progress: JsonValue; partial_report: ReportSnapshot | null;
+      profile_id: string; profile_version: number; profile_hash: string; profile_snapshot: JsonValue;
+    }>(
+      `SELECT runs.run_id, runs.target_url, runs.device_id, runs.execution_state, runs.created_at,
+              runs.deadline_at, runs.started_at, runs.ended_at, runs.progress, runs.partial_report,
+              profiles.profile_id, profiles.profile_version, profiles.profile_hash,
+              profiles.snapshot AS profile_snapshot
+       FROM validator_runs AS runs
+       JOIN validator_profiles AS profiles
+         ON profiles.profile_id = runs.profile_id AND profiles.profile_version = runs.profile_version
+       WHERE runs.team_id = $1 AND runs.run_id = $2`,
+      [teamId, runId],
+    );
+    const row = result.rows[0];
+    if (row === undefined) return null;
+    const report = await this.getReportForTeam(teamId, runId);
+    if (report === null) return null;
+    return {
+      run: { ...this.runSummary(row), partialReport: row.partial_report },
+      report,
+      profile: {
+        profileId: row.profile_id,
+        profileVersion: row.profile_version,
+        profileHash: row.profile_hash,
+        snapshot: row.profile_snapshot,
+      },
     };
   }
 

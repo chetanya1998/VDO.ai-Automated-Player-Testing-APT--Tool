@@ -59,12 +59,14 @@ export function RunDetail({
   pollingPaused,
   onRefresh,
   onArtifact,
+  onExport,
 }: {
   run: RunSummary;
   envelope: ReportEnvelope | null;
   pollingPaused: boolean;
   onRefresh(): void;
   onArtifact(artifactId: string): Promise<void>;
+  onExport(format: "json" | "html"): Promise<void>;
 }) {
   const checks = checksFrom(envelope, run.partialReport ?? null);
   const counts = verdictCounts(checks);
@@ -85,7 +87,11 @@ export function RunDetail({
           <h1>{run.targetUrl}</h1>
           <p className="mono">{run.runId}</p>
         </div>
-        <button className="secondary" type="button" onClick={onRefresh}>Refresh</button>
+        <div className="hero-actions">
+          <button className="secondary" type="button" onClick={onRefresh}>Refresh</button>
+          <button className="secondary" type="button" disabled={pending} onClick={() => void onExport("json")}>Export JSON</button>
+          <button className="secondary" type="button" disabled={pending} onClick={() => void onExport("html")}>Export HTML</button>
+        </div>
       </section>
 
       {pending && (
