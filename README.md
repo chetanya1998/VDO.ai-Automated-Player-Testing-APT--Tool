@@ -31,6 +31,7 @@ Tasks 01–08, 11–18, 22–29 are implemented:
 - a responsive local dashboard for fixture submission, bounded status polling, team history, health and RCA summaries, TC-1 through TC-23 coverage, authenticated artifacts, and a filterable evidence timeline;
 - authenticated redacted JSON and self-contained offline HTML technical-report exports with all persisted checks, evidence summaries, findings, timings, environment/profile versions and safe artifact references;
 - authenticated bounded URL/device batches with persisted mixed admission results, independent run deadlines, explicit retries, per-item report links and aggregate case/device completeness;
+- an optional deadline-bounded backend logger client with scoped bearer authentication, cursor pagination, rate-limit handling and ingestion watermark metadata; live access and correlation remain unverified;
 - explicit origin allowlisting for production browser runs, while unrestricted remote execution stays disabled.
 
 Remaining product verdict rules are still pending. No approved production profile, live URL, real demand capture, confirmed auction order, live viewability capture, confirmed device/article policies, or real-iOS evidence has been supplied, so this repository does not yet claim validation of a live publisher or advertising provider.
@@ -98,6 +99,7 @@ docs/                   Integration contract and implementation plan
 src/browser/            Bounded browser runner, evidence capture, and URL policy
 src/evidence/           Deterministic capture normalization
 src/logger/             Five-field browser logger payload parsing
+src/logger/client.ts    Optional bounded backend logger collection
 src/profile.ts          Deterministic profile snapshots
 src/profile/            Approved site/tag/product identity resolution
 src/rules/              Deterministic evidence-backed validator rules

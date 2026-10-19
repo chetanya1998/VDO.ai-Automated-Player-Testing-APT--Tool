@@ -375,7 +375,7 @@ export function createQueuedRun(input: {
     executionState: "queued",
     capabilities: {
       browserCollector: { state: "available" },
-      backendLogger: { state: "unavailable", reason: "optional verification is scheduled for task 09" },
+      backendLogger: { state: "unavailable", reason: "optional backend verification is not enabled for this run" },
       aiExplanation: { state: "unavailable", reason: "optional explanation is scheduled for task 19" },
     },
   });
