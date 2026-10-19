@@ -21,6 +21,94 @@ Production decisions and credentials
   -> labeled pilot and release decision
 ```
 
+## Parallel delivery plan
+
+The detailed tasks below can be delivered as eight larger packages. Four workstreams can run in parallel, with integration gates between waves.
+
+| Package | Clubbed tasks | Deliverable | Can run with |
+| --- | --- | --- | --- |
+| P1 Production contract | A01, A12 and external owner inputs | Approved profiles, rule decisions, domains, identity model, storage choice, environments and credentials | P2, P3, P4 |
+| P2 Container-ready control plane | A02–A04, A10, C04–C08 | Containerized API, real PostgreSQL, artifact staging and continuously running worker on Coolify | P1, P3, P4 |
+| P3 Isolated execution plane | A05–A07, A13, C03, C09–C10, C14 | Authenticated Chromium service on a separate host with enforced limits and proven network isolation | P1, P2, P4 |
+| P4 Hosted frontend foundation | V01–V05, V07–V09 | Vercel staging frontend using a configurable HTTPS API, exact CORS and security headers | P1, P2, P3 |
+| P5 Evidence services | A08–A09, C06, C11–C12 | Real artifact storage and trusted logger collector with isolated credentials | Late P2 and P3 |
+| P6 Operations and recovery | A11, A14, C13, C15–C16, V06, V12 | TLS, observability, alerts, backup/restore, end-to-end acceptance and rollback | After staging services exist |
+| P7 Production acceptance | A15–A16, C17–C18, V10–V11 | Production domains, exact deployment acceptance and approved live canary | After P1–P6 |
+| P8 Pilot and release | R01–R05 | Real corpus, device evidence, measured metrics and release decision | Corpus preparation can start during P2–P6; evaluation follows P7 |
+
+### Workstreams
+
+| Workstream | Primary packages | Scope |
+| --- | --- | --- |
+| Backend/control | P2, part of P5 | API, migrations, PostgreSQL, queue worker and artifact integration |
+| Browser/security | P3, browser part of P6 | Browser protocol, Chromium service, host isolation, limits and cleanup |
+| Frontend | P4, frontend part of P6 | API client configuration, hosted wording, Vercel build, CORS acceptance, UI smoke and rollback |
+| Platform/operations | Coolify parts of P2/P3/P5, then P6/P7 | Servers, networks, domains, TLS, secrets, storage, monitoring, backup and release |
+| Product/QA | P1 and P8 | Profiles, rule ownership, approved pages, labeled corpus, real devices and release decision |
+
+### Execution waves
+
+**Wave 0 — owner inputs and interfaces**
+
+- P1 confirms domains, policies, identity, storage, logger access and pilot inputs.
+- Backend and browser owners agree the browser-service API before implementing either side.
+- Backend and frontend owners agree the public API origin, error contract and CORS origins.
+- Platform prepares servers, DNS zones, GitHub access, Coolify and Vercel projects without enabling production traffic.
+
+**Wave 1 — parallel build**
+
+- Backend builds the container-ready API and real worker from P2.
+- Browser/security builds the isolated service and negative network suite from P3.
+- Frontend implements configurable API access, hosted language, build output, routing and headers from P4 against the existing real staging API or a temporary real API deployment. No mock API completes frontend acceptance.
+- Platform provisions PostgreSQL, storage, Coolify destinations and Vercel staging.
+- Product/QA prepares approved profiles and corpus definitions.
+
+**Wave 2 — staging integration**
+
+- Connect worker to browser service using the final authenticated protocol.
+- Connect API/worker to real PostgreSQL and artifact storage.
+- Connect the Vercel staging frontend directly to the Coolify staging API with exact-origin CORS.
+- Deploy the trusted collector against the authorized logger API.
+- Run real fixture jobs end to end through Vercel, Coolify, PostgreSQL and Chromium.
+
+**Wave 3 — operational acceptance**
+
+- Run network-isolation, authorization, redaction, cleanup and capacity checks.
+- Trigger real monitoring alerts.
+- Restore PostgreSQL and artifacts into a clean environment.
+- Prove backend and frontend rollback while preserving API compatibility.
+
+**Wave 4 — controlled production**
+
+- Bind acceptance to exact image digests, profile hashes and origins.
+- Deploy production frontend and backend domains.
+- Run one approved live publisher canary.
+- Keep all other remote inputs closed until the canary and evidence review pass.
+
+**Wave 5 — pilot release decision**
+
+- Collect real observations and real-device evidence.
+- Calculate pilot metrics, resolve disagreements and record the release decision.
+
+### Hard dependencies that cannot be parallelized away
+
+- The production worker cannot complete before the browser-service protocol and real browser service exist.
+- Vercel end-to-end acceptance cannot complete before a reachable Coolify API and exact CORS policy exist.
+- Deployment acceptance cannot be created before the actual network, secrets, images, restore and monitoring controls are tested.
+- A live canary cannot run before deployment acceptance matches its exact profile and origins.
+- Pilot evaluation cannot pass before real labeled observations and real mobile/iOS evidence exist.
+
+### Recommended first sprint
+
+Run these four packages together:
+
+1. **Backend:** A02–A04 — configurable API bind, API image and production worker.
+2. **Browser/security:** A05–A06 — browser protocol and real Chromium service.
+3. **Frontend:** V01, V03–V05 — API-base support, hosted UI, Vercel build and headers. Finish V02 with backend during integration.
+4. **Platform/product:** C01–C06 plus A01 — servers, repository connection, PostgreSQL, storage and production decisions.
+
+The sprint exits only when the Vercel staging UI can submit one real fixture job to the Coolify staging API, the real worker sends it to the separately hosted Chromium service, and the resulting report and artifact survive a restart. This exit criterion prevents each track from stopping at scaffolding.
+
 ## A. Application tasks blocking any production deployment
 
 These are code and product gaps. Coolify or Vercel configuration cannot compensate for them.
