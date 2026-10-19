@@ -59,6 +59,8 @@ Start the authenticated local API with `pnpm api` after setting `DATABASE_URL`, 
 
 Production-profile API admission remains disabled unless the deployed environment explicitly enables it with a fresh acceptance document covering every required security and recovery control, the exact profile hash and every approved HTTPS origin. See [Internal pilot operations](docs/operations.md) and [Deployment boundary](deploy/README.md).
 
+For a staged self-hosted deployment, including the exact Coolify setup, server topology, secrets, storage, backup, rollback and production acceptance procedure, see [Coolify self-hosting plan](docs/coolify-self-hosting.md).
+
 Validate the fixture profile:
 
 ```bash
