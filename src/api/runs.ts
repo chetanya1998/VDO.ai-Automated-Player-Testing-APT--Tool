@@ -4,7 +4,7 @@ import { realpath, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { assertApprovedUrl, createBrowserUrlPolicy, UrlPolicyError } from "../browser/url-policy.js";
+import { UrlPolicyError } from "../browser/url-policy.js";
 import type { JsonValue } from "../contracts.js";
 import { snapshotProfile } from "../profile.js";
 import { buildTechnicalReportExport, renderTechnicalReportHtml } from "../report/export.js";
@@ -12,6 +12,7 @@ import { IdempotencyConflictError, PostgresStore, QueueCapacityError } from "../
 import type { ApiIdentity } from "./auth.js";
 import { BatchApiError, presentBatch, submitBatch } from "./batches.js";
 import { serveDashboard } from "./static.js";
+import { DeploymentAcceptanceError, assertTargetAdmission, type DeploymentAcceptance } from "../deploy/acceptance.js";
 
 const MAX_BODY_BYTES = 1_048_576;
 
@@ -26,6 +27,8 @@ export interface RunApiOptions {
   authenticate(request: IncomingMessage): ApiIdentity | null;
   dashboardRoot?: string;
   artifactRoot?: string;
+  deploymentAcceptance?: DeploymentAcceptance;
+  deploymentBrowserImageDigest?: string;
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -127,7 +130,7 @@ function submissionHash(profileHash: string, targetUrl: string, deviceId: string
   return `sha256:${createHash("sha256").update(JSON.stringify([profileHash, targetUrl, deviceId])).digest("hex")}`;
 }
 
-async function createRun(request: IncomingMessage, response: ServerResponse, identity: ApiIdentity, store: PostgresStore): Promise<void> {
+async function createRun(request: IncomingMessage, response: ServerResponse, identity: ApiIdentity, options: RunApiOptions): Promise<void> {
   const key = request.headers["idempotency-key"];
   if (typeof key !== "string" || key.trim() === "" || Buffer.byteLength(key, "utf8") > 200) {
     throw new ApiError(400, "invalid_idempotency_key", "idempotency-key must contain 1 to 200 bytes");
@@ -136,22 +139,21 @@ async function createRun(request: IncomingMessage, response: ServerResponse, ide
   const targetUrl = text(body.targetUrl, "targetUrl");
   const deviceId = text(body.deviceId, "deviceId");
   const snapshot = snapshotProfile(body.profile);
-  if (snapshot.profile.profileStatus !== "fixture_only") {
-    throw new ApiError(400, "remote_execution_disabled", "the local API accepts controlled fixture profiles until task 20");
-  }
+  if (snapshot.profile.profileStatus === "production" && (options.deploymentAcceptance === undefined || options.deploymentBrowserImageDigest === undefined)) throw new ApiError(503, "remote_execution_unavailable", "remote execution has no valid deployment acceptance");
   if (!snapshot.profile.site.approvedUrls.includes(targetUrl)) {
     throw new ApiError(400, "target_not_approved", "targetUrl must be listed in profile.site.approvedUrls");
   }
-  const origins = [...new Set([
-    ...snapshot.profile.site.approvedUrls.map((value) => new URL(value).origin),
-    ...(snapshot.profile.site.approvedResourceOrigins ?? []).map((value) => new URL(value).origin),
-  ])];
-  assertApprovedUrl(targetUrl, createBrowserUrlPolicy(origins));
+  try {
+    await assertTargetAdmission(snapshot, targetUrl, options.deploymentAcceptance, options.deploymentBrowserImageDigest);
+  } catch (error) {
+    if (error instanceof DeploymentAcceptanceError) throw new ApiError(503, "remote_execution_unavailable", "remote execution deployment acceptance does not cover this profile");
+    throw error;
+  }
   if (!snapshot.profile.devices.some((device) => device.id === deviceId && device.state === "enabled")) {
     throw new ApiError(400, "device_not_enabled", "deviceId must identify an enabled profile device");
   }
 
-  const result = await store.enqueueRun({
+  const result = await options.store.enqueueRun({
     runId: randomUUID(),
     profileId: snapshot.profileId,
     profileVersion: snapshot.profileSchemaVersion,
@@ -187,12 +189,12 @@ async function handle(request: IncomingMessage, response: ServerResponse, option
     return;
   }
   if (request.method === "POST" && url.pathname === "/v1/runs") {
-    await createRun(request, response, identity, options.store);
+    await createRun(request, response, identity, options);
     return;
   }
   if (request.method === "POST" && url.pathname === "/v1/batches") {
     const key = request.headers["idempotency-key"];
-    const result = await submitBatch(options.store, identity, typeof key === "string" ? key : undefined, await requestJson(request));
+    const result = await submitBatch(options.store, identity, typeof key === "string" ? key : undefined, await requestJson(request), options.deploymentAcceptance, options.deploymentBrowserImageDigest);
     json(response, result.created ? 201 : 200, { created: result.created, ...result.detail });
     return;
   }

@@ -1,9 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
-import { assertApprovedUrl, createBrowserUrlPolicy } from "../browser/url-policy.js";
 import type { JsonValue } from "../contracts.js";
 import { snapshotProfile } from "../profile.js";
 import type { BatchDetail, BatchItemInput, PostgresStore } from "../store.js";
 import type { ApiIdentity } from "./auth.js";
+import { assertDeploymentAcceptance, assertTargetAdmission, DeploymentAcceptanceError, type DeploymentAcceptance } from "../deploy/acceptance.js";
 
 const MAX_URLS = 25;
 const MAX_DEVICES = 4;
@@ -62,6 +62,8 @@ export async function submitBatch(
   identity: ApiIdentity,
   idempotencyKey: string | undefined,
   input: unknown,
+  deploymentAcceptance?: DeploymentAcceptance,
+  deploymentBrowserImageDigest?: string,
 ): Promise<{ created: boolean; detail: ReturnType<typeof presentBatch> }> {
   if (idempotencyKey === undefined || idempotencyKey.trim() === "" || Buffer.byteLength(idempotencyKey, "utf8") > 200) {
     throw new BatchApiError(400, "invalid_idempotency_key", "idempotency-key must contain 1 to 200 bytes");
@@ -73,10 +75,24 @@ export async function submitBatch(
     throw new BatchApiError(400, "batch_limit_exceeded", `a batch must contain at most ${MAX_ITEMS} URL/device items`);
   }
   const snapshot = snapshotProfile(body.profile);
-  if (snapshot.profile.profileStatus !== "fixture_only") {
-    throw new BatchApiError(400, "remote_execution_disabled", "the local API accepts controlled fixture profiles until task 20");
+  const production = snapshot.profile.profileStatus === "production";
+  if (production && (deploymentAcceptance === undefined || deploymentBrowserImageDigest === undefined)) {
+    throw new BatchApiError(503, "remote_execution_unavailable", "remote execution has no valid deployment acceptance");
   }
   const resourceOrigins = (snapshot.profile.site.approvedResourceOrigins ?? []).map((value) => new URL(value).origin);
+  if (production) {
+    try {
+      assertDeploymentAcceptance({
+        acceptance: deploymentAcceptance!,
+        browserImageDigest: deploymentBrowserImageDigest!,
+        profileHash: snapshot.profileHash,
+        requiredOrigins: [...snapshot.profile.site.approvedUrls.map((value) => new URL(value).origin), ...resourceOrigins],
+      });
+    } catch (error) {
+      if (error instanceof DeploymentAcceptanceError) throw new BatchApiError(503, "remote_execution_unavailable", "remote execution deployment acceptance does not cover this profile");
+      throw error;
+    }
+  }
   const enabledDevices = new Set(snapshot.profile.devices.filter((device) => device.state === "enabled").map((device) => device.id));
   const seenDevices = new Set<string>();
   const deviceRejections = deviceIds.map((rawDevice) => {
@@ -101,10 +117,9 @@ export async function submitBatch(
     } else {
       seenTargets.add(rawTarget);
       try {
-        const policy = createBrowserUrlPolicy([new URL(rawTarget).origin, ...resourceOrigins]);
-        assertApprovedUrl(rawTarget, policy);
+        await assertTargetAdmission(snapshot, rawTarget, deploymentAcceptance, deploymentBrowserImageDigest);
       } catch {
-        targetRejection = rejection("target_not_allowed", "target URL is outside the local execution policy");
+        targetRejection = rejection("target_not_allowed", "target URL is outside the admitted execution policy");
       }
     }
     for (const [deviceIndex, rawDevice] of deviceIds.entries()) {

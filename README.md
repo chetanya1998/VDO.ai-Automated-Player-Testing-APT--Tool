@@ -57,6 +57,8 @@ Copy your local PostgreSQL connection strings into ignored `.env.local`, export 
 
 Start the authenticated local API with `pnpm api` after setting `DATABASE_URL`, `VDO_VALIDATOR_API_IDENTITIES`, and `VDO_VALIDATOR_ARTIFACT_ROOT`, then open `http://127.0.0.1:8787/`. See [Local authenticated run API](docs/api.md), [Local validation dashboard](docs/dashboard.md), and [Bounded URL batches](docs/batches.md).
 
+Production-profile API admission remains disabled unless the deployed environment explicitly enables it with a fresh acceptance document covering every required security and recovery control, the exact profile hash and every approved HTTPS origin. See [Internal pilot operations](docs/operations.md) and [Deployment boundary](deploy/README.md).
+
 Validate the fixture profile:
 
 ```bash

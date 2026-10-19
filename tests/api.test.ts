@@ -7,6 +7,8 @@ import test from "node:test";
 import { Pool } from "pg";
 import { createBearerAuthenticator } from "../src/api/auth.js";
 import { createRunApiServer, listenLocal } from "../src/api/runs.js";
+import { DEPLOYMENT_CONTROLS, type DeploymentAcceptance } from "../src/deploy/acceptance.js";
+import { snapshotProfile } from "../src/profile.js";
 import { applyMigrations, PostgresStore } from "../src/store.js";
 
 const teamAToken = "team-a-token-00000000000000000000";
@@ -26,6 +28,17 @@ function profile(approvedUrls: string[]): unknown {
     profileId: "local-api-fixture",
     profileStatus: "fixture_only",
     site: { approvedUrls },
+    devices: [{ id: "desktop", state: "enabled" }],
+    logger: { backendCorrelation: { state: "disabled" } },
+  };
+}
+
+function productionProfile(): unknown {
+  return {
+    schemaVersion: 1,
+    profileId: "production-disabled-without-acceptance",
+    profileStatus: "production",
+    site: { approvedUrls: ["https://1.1.1.1/article"] },
     devices: [{ id: "desktop", state: "enabled" }],
     logger: { backendCorrelation: { state: "disabled" } },
   };
@@ -87,6 +100,14 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     assert.equal(malformed.status, 400);
     assert.doesNotMatch(malformedText, new RegExp(teamAToken));
     assert.doesNotMatch(malformedText, /stack|\bat\s+\w+/i);
+
+    const remoteWithoutAcceptance = await fetch(`${base}/v1/runs`, {
+      method: "POST",
+      headers: headers(teamAToken, "remote-disabled"),
+      body: JSON.stringify({ profile: productionProfile(), targetUrl: "https://1.1.1.1/article", deviceId: "desktop" }),
+    });
+    assert.equal(remoteWithoutAcceptance.status, 503);
+    assert.deepEqual(await body(remoteWithoutAcceptance), { error: { code: "remote_execution_unavailable", message: "remote execution has no valid deployment acceptance" } });
 
     const submission = JSON.stringify({ profile: fixtureProfile, targetUrl: targetOne, deviceId: "desktop" });
     const created = await fetch(`${base}/v1/runs`, { method: "POST", headers: headers(teamAToken, "retry-one"), body: submission });
@@ -237,5 +258,62 @@ test("real local API authenticates, scopes teams, deduplicates submissions, and 
     await admin.end();
     await rm(artifacts, { recursive: true, force: true });
     await rm(outsideArtifacts, { recursive: true, force: true });
+  }
+});
+
+test("real API admits an exact production profile only after deployment acceptance", {
+  skip: process.env.TEST_DATABASE_URL ? false : "set TEST_DATABASE_URL to a disposable PostgreSQL database",
+}, async () => {
+  const connectionString = process.env.TEST_DATABASE_URL!;
+  const schema = `validator_${randomUUID().replaceAll("-", "")}`;
+  const admin = new Pool({ connectionString, max: 1 });
+  const pool = new Pool({ connectionString, max: 3, options: `-c search_path=${schema}` });
+  let server: ReturnType<typeof createRunApiServer> | undefined;
+  try {
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    await applyMigrations(pool);
+    const approved = productionProfile();
+    const profileHash = snapshotProfile(approved).profileHash;
+    const now = Date.now();
+    const deploymentAcceptance: DeploymentAcceptance = {
+      schemaVersion: 1,
+      acceptanceId: "api-production-acceptance",
+      environmentId: "api-contract-environment",
+      evaluatedAt: new Date(now - 60_000).toISOString(),
+      expiresAt: new Date(now + 60 * 60_000).toISOString(),
+      browserImageDigest: `sha256:${"b".repeat(64)}`,
+      approvedProfileHashes: [profileHash],
+      approvedOrigins: ["https://1.1.1.1"],
+      checks: DEPLOYMENT_CONTROLS.map((control) => ({ control, state: "passed", evidence: [{ evidenceId: `api/${control}`, sha256: `sha256:${"a".repeat(64)}` }] })),
+    };
+    server = createRunApiServer({
+      store: new PostgresStore(pool, { capacity: 2, leaseMs: 5_000, runDeadlineMs: 20_000, retentionMs: 10_000 }),
+      authenticate: createBearerAuthenticator([{ token: teamAToken, userId: "alice", teamId: "team-a" }]),
+      deploymentAcceptance,
+      deploymentBrowserImageDigest: deploymentAcceptance.browserImageDigest,
+    });
+    const port = await listenLocal(server, 0);
+    const base = `http://127.0.0.1:${port}`;
+    const accepted = await fetch(`${base}/v1/runs`, {
+      method: "POST",
+      headers: headers(teamAToken, "accepted-production"),
+      body: JSON.stringify({ profile: approved, targetUrl: "https://1.1.1.1/article", deviceId: "desktop" }),
+    });
+    assert.equal(accepted.status, 201);
+
+    const changed = productionProfile() as { site: { approvedUrls: string[]; approvedResourceOrigins?: string[] } };
+    changed.site.approvedResourceOrigins = ["https://8.8.8.8"];
+    const rejected = await fetch(`${base}/v1/runs`, {
+      method: "POST",
+      headers: headers(teamAToken, "changed-production"),
+      body: JSON.stringify({ profile: changed, targetUrl: "https://1.1.1.1/article", deviceId: "desktop" }),
+    });
+    assert.equal(rejected.status, 503);
+    assert.equal((await body<{ error: { code: string } }>(rejected)).error.code, "remote_execution_unavailable");
+  } finally {
+    if (server !== undefined) await new Promise<void>((resolve) => server!.close(() => resolve()));
+    await pool.end();
+    await admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+    await admin.end();
   }
 });
