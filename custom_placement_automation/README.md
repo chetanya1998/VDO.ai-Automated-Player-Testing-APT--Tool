@@ -2,6 +2,8 @@
 
 A local tool for checking vdo.ai player placement on publisher pages before a site goes live. You give it a domain, a tag, a list of article URLs and either a `vdo.ai.js` build or a `style.css`. It opens each page in Chromium, applies your code, checks whether the player was placed, and keeps a report with screenshots.
 
+The local backend now requires PostgreSQL (`DATABASE_URL` in `server/.env`). See [the 23-case mapping, implementation stages and local setup](LOCAL-VALIDATION-PLAN.md). The 23-case validators are not yet connected to this placement dashboard.
+
 ## Features
 
 ### Two kinds of checks
@@ -22,7 +24,7 @@ window.dispatchEvent(new CustomEvent('vdo:placement', {
 
 ### Running checks
 
-- **Devices:** desktop (1366×768), mobile (Pixel 7), or both. Devices run side by side.
+- **Devices:** desktop (1366×768), mobile (Pixel 7), or both. Devices run sequentially within a job, with at most `MAX_CONCURRENT_JOBS` placement contexts active.
 - **URLs:** up to 50 per check, one per line.
 - **Code input:** upload a file or paste the code.
 - **Lazy-load scrolling:** while waiting, the page is scrolled in steps so lazy-loaded players and ad slots get triggered. The step size and interval can be set per check (under the scroll fields) or as defaults in `server/.env`.
@@ -74,6 +76,8 @@ The script checks for Node.js 20+ (installing it through nvm if it's missing or 
 
 Open **http://localhost:5173**. Full instructions, including troubleshooting, are in [SETUP.md](SETUP.md).
 
+Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and presence of Chromium; actual browser launch still requires a successful run.
+
 | Command (project root) | Does |
 |---|---|
 | `npm install` | Installs server and client dependencies, plus Chromium |
@@ -87,7 +91,7 @@ Open **http://localhost:5173**. Full instructions, including troubleshooting, ar
    - **vdo.ai.js checks:** the tag's script request is answered with your file.
    - **CSS checks:** your CSS is injected as the page loads.
 3. For each URL, the runner listens for `vdo:placement` in every frame and looks for the wrapper. It scrolls while waiting, takes the screenshots and works out the result. One URL can't take more than 60 seconds.
-4. Results are written to `server/storage/reports.json`, with screenshots under `server/storage/screenshots/`.
+4. Jobs and results are stored in PostgreSQL's `custom_placement` schema. Screenshots stay under `server/storage/screenshots/`, with SHA-256 digests in the report. An existing `reports.json` is imported once and retained as a source backup.
 
 ## Project structure
 
@@ -96,13 +100,14 @@ package.json            root scripts: install, start, setup
 server/                 Express API + Playwright runner
   server.js
   src/
-    config/             settings (from server/.env, all optional)
+    config/             settings (DATABASE_URL required in server/.env)
     routes/, controllers/
     services/
       placementRunner   opens pages, applies code, checks placement, screenshots
       tagDiagnostics    records what vdo.ai.js did on each page
       jobQueue          background jobs, max 2 at once
-      results           reports.json + screenshot files
+      results           PostgreSQL reports + screenshot files
+      database          durable jobs, reports and exclusive worker ownership
       scriptStore       uploaded scripts (used by Re-run)
       pdfReport         PDF reports (separate headless Chromium)
   storage/              reports.json, screenshots/, scripts/  (created automatically, not in git)
@@ -120,6 +125,7 @@ implementation/         planning notes
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | Health check |
+| GET | `/api/ready` | Database, queue and Chromium installation readiness |
 | GET | `/api/settings` | Default scroll settings, limits and the per-URL time limit |
 | POST | `/api/placement-checks` | Start a check and return a job |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
@@ -132,6 +138,6 @@ implementation/         planning notes
 ## Limitations
 
 - **No login.** Anyone who can reach the app can run checks and delete reports. By default it's only reachable from the machine it runs on.
-- **Jobs in progress are held in memory,** so restarting the server loses running checks. Finished runs are saved.
+- **Restart recovery:** queued jobs resume; interrupted jobs are marked failed for inspection, preserving completed-device results. The current URL is not resumed automatically. Reports remain in PostgreSQL; terminal job polling records expire after an hour.
 - **Some sites block automated browsers;** these show up as `page_blocked`.
 - **`script_not_loaded` is common on sites where the ad slot doesn't always fill,** because then the page never requests `vdo.ai.js`.

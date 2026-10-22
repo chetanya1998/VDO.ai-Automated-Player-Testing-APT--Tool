@@ -1,5 +1,5 @@
 import * as resultsService from '../services/results.service.js';
-import { hasPendingJobs } from '../services/jobQueue.service.js';
+import { withIdleQueue } from '../services/jobQueue.service.js';
 import { renderRunPdf } from '../services/pdfReport.service.js';
 import { httpError } from '../utils/httpError.js';
 
@@ -26,13 +26,12 @@ export async function getRun(req, res) {
 
 export async function deleteRun(req, res) {
   if (!UUID_PATTERN.test(req.params.runId)) throw httpError(404, 'Run not found');
-  await resultsService.deleteRun(req.params.runId);
+  await withIdleQueue(() => resultsService.deleteRun(req.params.runId));
   res.status(204).end();
 }
 
 export async function clearRuns(_req, res) {
-  if (hasPendingJobs()) throw httpError(409, 'A check is running. Clear history once it finishes.');
-  res.json(await resultsService.clearRuns());
+  res.json(await withIdleQueue(() => resultsService.clearRuns()));
 }
 
 export async function downloadRunPdf(req, res) {

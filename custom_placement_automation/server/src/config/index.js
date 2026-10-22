@@ -11,12 +11,19 @@ const envNumber = (name, fallback) => {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
 };
+const envInteger = (name, fallback, max) => {
+  if (process.env[name] === undefined) return fallback;
+  const value = Number(process.env[name]);
+  if (!Number.isInteger(value) || value < 1 || value > max) throw new Error(`${name} must be an integer from 1 to ${max}`);
+  return value;
+};
 
 const clientDistDir = path.resolve(serverRoot, '../client/dist');
 
 const config = {
   port: Number(process.env.PORT) || 3000,
-  host: process.env.HOST || undefined,
+  host: '127.0.0.1',
+  databaseUrl: process.env.DATABASE_URL,
   env: process.env.NODE_ENV || 'development',
 
   clientDistDir: fs.existsSync(path.join(clientDistDir, 'index.html')) ? clientDistDir : null,
@@ -53,7 +60,8 @@ const config = {
   },
 
   checks: {
-    maxConcurrentJobs: Number(process.env.MAX_CONCURRENT_JOBS) || 2,
+    maxConcurrentJobs: envInteger('MAX_CONCURRENT_JOBS', 2, 8),
+    maxPendingJobs: envInteger('MAX_PENDING_JOBS', 20, 200),
     maxUrls: 50,
     maxScriptBytes: 2 * 1024 * 1024,
     jobTtlMs: 60 * 60 * 1000,

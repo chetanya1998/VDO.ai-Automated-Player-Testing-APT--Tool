@@ -11,6 +11,7 @@ const isFinished = (job) => job.status === 'completed' || job.status === 'failed
 export default function CurrentCheck({ job: initialJob, onFinished }) {
   const [job, setJob] = useState(initialJob);
   const [pollError, setPollError] = useState('');
+  const [retryAttempt, setRetryAttempt] = useState(0);
 
   useEffect(() => {
     if (isFinished(job)) return undefined;
@@ -23,6 +24,7 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
         if (isFinished(next)) onFinished(next);
       } catch (err) {
         setPollError(err.message);
+        setRetryAttempt(attempt => attempt + 1);
         if (err.status === 404) {
           const expired = { ...job, status: 'failed', error: err.message };
           setJob(expired);
@@ -32,7 +34,7 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
     }, POLL_INTERVAL_MS);
 
     return () => clearTimeout(timer);
-  }, [job, onFinished]);
+  }, [job, onFinished, retryAttempt]);
 
   const { done, total } = job.progress;
   const percent = total ? Math.round((done / total) * 100) : 0;

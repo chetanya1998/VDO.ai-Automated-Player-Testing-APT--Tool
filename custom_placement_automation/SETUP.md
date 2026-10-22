@@ -1,5 +1,7 @@
 # Setup
 
+**Local PostgreSQL is now required.** Before the final start step, set `DATABASE_URL` in `server/.env` to your local connection. The server creates the `custom_placement` schema and imports an existing `server/storage/reports.json` once. The setup script does not install PostgreSQL. See [LOCAL-VALIDATION-PLAN.md](LOCAL-VALIDATION-PLAN.md) for recovery, tests and the 23-case rollout.
+
 Step-by-step instructions for installing and running Placement Automation. The steps are written so a person or an AI agent can follow them in order. Each step says how to confirm it worked.
 
 ## Quick path: the setup script

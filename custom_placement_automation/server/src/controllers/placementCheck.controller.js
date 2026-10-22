@@ -59,6 +59,10 @@ function parseCheckInput(body = {}) {
       throw httpError(400, `Not a valid URL: ${value}`);
     }
     if (!/^https?:$/.test(url.protocol)) throw httpError(400, `URL must start with http(s): ${value}`);
+    if (url.username || url.password) throw httpError(400, 'URLs must not contain credentials');
+    if (normalizeHost(url.hostname) !== domain && !normalizeHost(url.hostname).endsWith(`.${domain}`)) {
+      throw httpError(400, 'Every URL must belong to the supplied publisher domain');
+    }
   }
 
   const scroll = parseScroll(body.scroll);
@@ -83,7 +87,7 @@ async function resolveScript(body, type) {
 export async function createPlacementCheck(req, res) {
   const input = parseCheckInput(req.body);
   const { script, scriptId } = await resolveScript(req.body, input.type);
-  const job = jobQueue.enqueueJob({ ...input, script, scriptId, scriptBytes: Buffer.byteLength(script) });
+  const job = await jobQueue.enqueueJob({ ...input, script, scriptId, scriptBytes: Buffer.byteLength(script) });
   res.status(202).json(job);
 }
 

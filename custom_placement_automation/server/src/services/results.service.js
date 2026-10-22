@@ -4,41 +4,16 @@ import path from 'node:path';
 import config from '../config/index.js';
 import { httpError } from '../utils/httpError.js';
 import { clearScripts } from './scriptStore.service.js';
+import { getDatabase } from './database.service.js';
 
-const { reportsFile, screenshotsDir } = config.storage;
+const { screenshotsDir } = config.storage;
 export const SCREENSHOTS_URL_PATH = '/screenshots';
 
-let writeQueue = Promise.resolve();
-
 async function readRuns() {
-  try {
-    return JSON.parse(await fs.readFile(reportsFile, 'utf8'));
-  } catch (err) {
-    if (err.code === 'ENOENT') return [];
-    throw err;
-  }
+  return getDatabase().runs();
 }
 
-async function writeRuns(runs) {
-  const tmpFile = `${reportsFile}.tmp`;
-  await fs.mkdir(path.dirname(reportsFile), { recursive: true });
-  await fs.writeFile(tmpFile, JSON.stringify(runs, null, 2));
-  await fs.rename(tmpFile, reportsFile);
-}
-
-function updateRuns(change) {
-  const update = writeQueue.then(async () => {
-    const runs = await readRuns();
-    const { runs: next, value } = await change(runs);
-    await writeRuns(next);
-    return value;
-  });
-
-  writeQueue = update.catch(() => {});
-  return update;
-}
-
-const appendRun = (run) => updateRuns((runs) => ({ runs: [...runs, run] }));
+const appendRun = (run) => getDatabase().saveRun(run);
 
 async function writeScreenshots(runId, resultId, buffers) {
   const runDir = path.join(screenshotsDir, runId);
@@ -48,7 +23,11 @@ async function writeScreenshots(runId, resultId, buffers) {
     buffers.map(async (buffer, index) => {
       const fileName = `${resultId}_${index + 1}.jpg`;
       await fs.writeFile(path.join(runDir, fileName), buffer);
-      return `${SCREENSHOTS_URL_PATH}/${runId}/${fileName}`;
+      return {
+        url: `${SCREENSHOTS_URL_PATH}/${runId}/${fileName}`,
+        sha256: crypto.createHash('sha256').update(buffer).digest('hex'),
+        bytes: buffer.length,
+      };
     }),
   );
 }
@@ -59,7 +38,8 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
   const results = await Promise.all(
     run.results.map(async ({ screenshots, ...result }) => {
       const resultId = crypto.randomUUID();
-      return { ...result, id: resultId, screenshots: await writeScreenshots(id, resultId, screenshots) };
+      const artifacts = await writeScreenshots(id, resultId, screenshots);
+      return { ...result, id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
     }),
   );
 
@@ -115,17 +95,13 @@ export async function getRun(runId) {
 }
 
 export async function deleteRun(runId) {
-  await updateRuns((runs) => {
-    if (!runs.some((r) => r.id === runId)) throw httpError(404, 'Run not found');
-    return { runs: runs.filter((r) => r.id !== runId) };
-  });
+  if (!await getDatabase().deleteRun(runId)) throw httpError(404, 'Run not found');
   await fs.rm(path.join(screenshotsDir, runId), { recursive: true, force: true });
 }
 
-export function clearRuns() {
-  return updateRuns(async (runs) => {
-    await fs.rm(screenshotsDir, { recursive: true, force: true });
-    await clearScripts();
-    return { runs: [], value: { deleted: runs.length } };
-  });
+export async function clearRuns() {
+  const deleted = await getDatabase().clearRuns();
+  await fs.rm(screenshotsDir, { recursive: true, force: true });
+  await clearScripts();
+  return { deleted };
 }

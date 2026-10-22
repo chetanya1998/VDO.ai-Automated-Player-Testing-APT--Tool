@@ -88,7 +88,7 @@ function reasonForError(err) {
   return err.name === 'TimeoutError' ? REASON.TIMEOUT : REASON.PAGE_BLOCKED;
 }
 
-const isTagScript = (url, tag) => url.hostname.endsWith('vdo.ai') && url.pathname === `/core/${tag}/vdo.ai.js`;
+const isTagScript = (url, tag) => (url.hostname === 'vdo.ai' || url.hostname.endsWith('.vdo.ai')) && url.pathname === `/core/${tag}/vdo.ai.js`;
 
 async function overrideTagScript(context, tag, script) {
   const stats = { hits: 0 };
@@ -351,6 +351,7 @@ async function checkUrl(page, url, { overrideStats, diagnostics, placementEvents
 
 async function openSession({ device, tag, script, type }) {
   const context = await browserService.newContext(device);
+  try {
   const overrideStats = type === CHECK_TYPE.JS ? await overrideTagScript(context, tag, script) : { hits: 0 };
   const diagnostics = attachTagDiagnostics(context, tag);
   await context.addInitScript(guardWindowCloseScript);
@@ -368,6 +369,10 @@ async function openSession({ device, tag, script, type }) {
   const session = { context, page, overrideStats, diagnostics, placementEvents, closing: false };
   page.on('close', () => !session.closing && logger.warn(`${device} page was closed during a check`));
   return session;
+  } catch (error) {
+    await context.close().catch(() => {});
+    throw error;
+  }
 }
 
 export async function runPlacementChecks({
@@ -395,7 +400,7 @@ export async function runPlacementChecks({
       }
 
       results.push(await checkUrl(session.page, url, session, { scroll, type }));
-      onUrlDone();
+      await onUrlDone();
     }
   } finally {
     if (session) {
