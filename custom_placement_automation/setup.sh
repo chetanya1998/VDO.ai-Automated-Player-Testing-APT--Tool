@@ -120,6 +120,21 @@ npm --prefix server run browsers:install
 ok "Chromium ready"
 
 # ---------------------------------------------------------------------------
+# The optional deep test (all 23 cases) uses the validator compiled in the repository root.
+step "Building the deep test engine (23 cases)"
+REPO_DIR="$(cd "$ROOT_DIR/.." && pwd)"
+if [ -f "$REPO_DIR/package.json" ] && [ -f "$REPO_DIR/tsconfig.json" ]; then
+  if (cd "$REPO_DIR" && npx --yes pnpm@10.28.0 install --frozen-lockfile --config.engine-strict=false && npx --yes pnpm@10.28.0 exec tsc -p tsconfig.json); then
+    ok "Deep test engine built"
+  else
+    warn "Couldn't build the deep test engine. Placement checks still work."
+    warn "  To enable deep tests later run: cd \"$REPO_DIR\" && pnpm install && pnpm build"
+  fi
+else
+  warn "Repository root not found; deep tests stay unavailable."
+fi
+
+# ---------------------------------------------------------------------------
 if [ "$OS" = linux ]; then
   step "Checking Chromium's system libraries"
   chromium_path="$(cd "$ROOT_DIR/server" && node -e "import('playwright').then((p) => console.log(p.chromium.executablePath()))" 2>/dev/null || true)"

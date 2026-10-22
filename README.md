@@ -403,7 +403,8 @@ flowchart LR
 | --- | --- |
 | 1. Local execution foundation | Implemented |
 | 2. Real evidence / production observation mode | In progress — dashboard readiness now uses a real Chromium launch; cancellation, per-URL checkpoints and evidence retention pending |
-| 3–6. Case integration and acceptance | Not started |
+| 3–5. Case integration | Connected as the opt-in **deep test**: all 23 cases run per URL from the placement dashboard ([details](custom_placement_automation/README.md#deep-test-all-23-cases)) |
+| 6. Dashboard and acceptance | Dashboard done; live publisher acceptance and confirmed policies pending |
 
 Each case maps to an existing module under `src/` (for example TC-1 → `rules/integration.ts`, TC-14 → `rules/layout.ts`, TC-23 → `rules/articles.ts`); the full table is in the plan.
 

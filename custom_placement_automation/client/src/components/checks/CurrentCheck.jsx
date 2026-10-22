@@ -38,11 +38,14 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
 
   const { done, total } = job.progress;
   const percent = total ? Math.round((done / total) * 100) : 0;
+  // Deep jobs run the placement check and the 23-case deep test once per URL and device.
+  const progressLabel = job.deep ? `Checking… ${done}/${total} steps (placement + deep test per URL)` : `Checking… ${done}/${total} URLs`;
 
   return (
     <Card title="Current check">
       <div className="job-meta">
         <Badge tone="neutral">{checkTypeLabel(job.type)}</Badge>
+        {job.deep && <Badge tone="accent">Deep test · 23 cases</Badge>}
         <strong>{job.tag}</strong>
         <span className="muted">
           {job.domain} · {job.devices.join(' + ')}
@@ -55,7 +58,7 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
           <div className="progress-label">
             {job.status === 'queued'
               ? `Queued${job.queuePosition ? ` (position ${job.queuePosition})` : ''}…`
-              : `Checking… ${done}/${total} URLs`}
+              : progressLabel}
           </div>
           <div className="progress" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
             <div className="progress-bar" style={{ width: `${percent}%` }} />

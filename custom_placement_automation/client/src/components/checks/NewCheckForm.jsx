@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, FileInput, Input, Segmented, StatusPill, TextArea } from '../ui';
+import { Alert, Button, FileInput, Input, Segmented, TextArea, Toggle } from '../ui';
 import { ArrowRightIcon } from '../ui/icons.jsx';
 import { startPlacementCheck } from '../../api/placementChecks.js';
 import { getSettings } from '../../api/settings.js';
@@ -31,13 +31,16 @@ const TYPE_CARDS = [
 const capitalize = (word) => word[0].toUpperCase() + word.slice(1);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-function FormSection({ step, title, children }) {
+function FormSection({ step, title, hint, className = '', children }) {
   return (
-    <section className="form-section">
-      <h3 className="form-section-title">
-        <span className="step">{step}</span>
-        {title}
-      </h3>
+    <section className={`form-section form-block ${className}`.trim()}>
+      <header className="form-block-head">
+        <h3 className="form-section-title">
+          <span className="step">{step}</span>
+          {title}
+        </h3>
+        {hint && <p className="form-block-hint">{hint}</p>}
+      </header>
       {children}
     </section>
   );
@@ -49,7 +52,7 @@ const parseUrls = (text) =>
     .map((u) => u.trim())
     .filter(Boolean);
 
-export default function NewCheckForm({ disabled, unavailable = false, onStarted, prefill, onReset }) {
+export default function NewCheckForm({ disabled, unavailable = false, deepEngine = null, onStarted, prefill, onReset }) {
   const [type, setType] = useState(prefill?.type ?? CHECK_TYPE.JS);
   const [domain, setDomain] = useState(prefill?.domain ?? '');
   const [tag, setTag] = useState(prefill?.tag ?? '');
@@ -62,6 +65,8 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
   const [scrollInterval, setScrollInterval] = useState(prefill?.scroll ? String(prefill.scroll.intervalMs) : '');
   const [scrollLimits, setScrollLimits] = useState(null);
   const [urlTimeoutMs, setUrlTimeoutMs] = useState(null);
+  const [deepUrlTimeoutMs, setDeepUrlTimeoutMs] = useState(null);
+  const [deep, setDeep] = useState(prefill?.deep ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,6 +81,7 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
       .then((settings) => {
         setScrollLimits(settings.scroll.limits);
         setUrlTimeoutMs(settings.urlTimeoutMs);
+        setDeepUrlTimeoutMs(settings.deepUrlTimeoutMs ?? null);
         if (hasPrefilledScroll) return;
         setScrollRatio(String(settings.scroll.stepViewportRatio));
         setScrollInterval(String(settings.scroll.intervalMs));
@@ -101,6 +107,7 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
     if (urls.length === 0) return setError('Add at least one URL.');
     if (pasting && !codeText.trim()) return setError(`Paste the ${type} code to test.`);
     if (!pasting && !codeFile && !storedCode) return setError(`Choose the ${type} file to test.`);
+    if (deep && deepEngine && !deepEngine.available) return setError(deepEngine.message);
 
     setSubmitting(true);
     try {
@@ -111,6 +118,7 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
         tag: tag.trim(),
         devices,
         urls,
+        deep,
         script: pasting ? codeText : codeFile ? await codeFile.text() : undefined,
         scriptId: useStored ? storedCode.id : undefined,
         scriptName: pasting ? type : (codeFile?.name ?? storedCode?.name),
@@ -135,7 +143,11 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
     type === CHECK_TYPE.JS ? 'Custom placement' : 'CSS check',
     devices.length ? devices.map(capitalize).join(' + ') : 'No device',
     plural(urls.length, 'URL'),
+    ...(deep ? ['Deep test · 23 cases'] : []),
   ];
+  const deepUnavailable = deepEngine !== null && !deepEngine.available;
+  const deepSeconds = deepUrlTimeoutMs ? Math.round(deepUrlTimeoutMs / 1000) : 90;
+  const deepRuns = urls.length * devices.length;
 
   return (
     <section className="panel">
@@ -162,7 +174,8 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
       )}
 
       <form className="panel-form" onSubmit={handleSubmit}>
-        <FormSection step="1" title="Check type">
+        <div className="form-grid">
+        <FormSection step="1" title="What to test" hint="Pick the check type and add the code to apply on each page.">
           <div className="type-cards" role="radiogroup" aria-label="Check type">
             {TYPE_CARDS.map((card) => {
               const active = type === card.value;
@@ -228,7 +241,7 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
           </div>
         </FormSection>
 
-        <FormSection step="2" title="Target site">
+        <FormSection step="2" title="Target site" hint="The publisher domain, its vdo.ai tag and the article URLs to open.">
           <div className="form-row">
             <Input
               id="domain"
@@ -270,7 +283,7 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
           </div>
         </FormSection>
 
-        <FormSection step="3" title="Run settings">
+        <FormSection step="3" title="Run settings" hint="Devices to emulate and how the page is scrolled to trigger lazy loading.">
           <div className="settings-row">
             <div className="field">
               <span className="field-label">Devices</span>
@@ -324,6 +337,24 @@ export default function NewCheckForm({ disabled, unavailable = false, onStarted,
             </div>
           </div>
         </FormSection>
+
+        <FormSection step="4" title="Test depth" className={deep ? 'form-block-deep' : ''}>
+          <Toggle
+            id="deep-test"
+            checked={deep}
+            onChange={setDeep}
+            disabled={busy || deepUnavailable}
+            label="Automated player testing — deep"
+            badge="23 cases"
+            description={
+              deep
+                ? `After each placement check, the same page is opened again with your ${type} applied and all 23 player test cases are validated (tag, logger events, ads, viewability, devices). Adds up to ${deepSeconds} s per URL and device${deepRuns ? ` (${plural(deepRuns, 'deep run')} for this check)` : ''}.`
+                : 'Off: only the placement check runs. Turn on to also validate all 23 player test cases on each URL, using your custom placement code.'
+            }
+          />
+          {deepUnavailable && <Alert tone="warning">{deepEngine.message}</Alert>}
+        </FormSection>
+        </div>
 
         {error && <Alert tone="error">{error}</Alert>}
 

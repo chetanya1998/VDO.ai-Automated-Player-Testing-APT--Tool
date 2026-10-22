@@ -10,3 +10,4 @@ export { default as StatusPill } from './StatusPill.jsx';
 export { default as Table } from './Table.jsx';
 export { default as TextArea } from './TextArea.jsx';
 export { default as Tooltip } from './Tooltip.jsx';
+export { default as Toggle } from './Toggle.jsx';

@@ -120,7 +120,7 @@ function renderResult(run, result, index, images) {
   ];
 
   return `
-  <section class="result ${result.status}">
+  <section class="result ${result.status}${result.deep ? ' has-deep' : ''}">
     <header>
       <span class="badge ${result.status}">${result.status.toUpperCase()}</span>
       <span class="index">#${index + 1}</span>
@@ -202,6 +202,8 @@ function renderReport(run, imagesByResult) {
   img { display: block; width: 100%; max-height: 110mm; object-fit: contain; object-position: top; border: 1px solid #dde1e6; border-radius: 4px; background: #f4f6f8; }
   figcaption { color: #5c6570; font-size: 9.5px; margin-top: 2px; }
   .badge.warn { color: #9a6700; background: #fff4d6; } .badge.unknown { color: #475467; background: #eef0f3; } .badge.na { color: #475467; background: #f4f6f8; }
+  .result.has-deep { break-inside: auto; }
+  .result.has-deep > header, .result.has-deep .shots { break-inside: avoid; }
   .deep { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #dde1e6; }
   .deep h3 { margin: 0 0 6px; font-size: 12px; display: flex; gap: 6px; align-items: center; }
   .deep-h { margin: 8px 0 2px; font-weight: 600; }

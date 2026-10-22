@@ -1,10 +1,11 @@
 import { request } from './client.js';
 
-export const listRuns = ({ page = 1, pageSize = 20, q = '', status = '', type = '' } = {}) => {
+export const listRuns = ({ page = 1, pageSize = 20, q = '', status = '', type = '', mode = '' } = {}) => {
   const params = new URLSearchParams({ page, pageSize });
   if (q) params.set('q', q);
   if (status) params.set('status', status);
   if (type) params.set('type', type);
+  if (mode) params.set('mode', mode);
   return request(`/api/history?${params}`);
 };
 

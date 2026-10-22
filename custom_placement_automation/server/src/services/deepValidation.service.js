@@ -63,6 +63,7 @@ export async function runDeepCheck({ url, domain, tag, device, type, script, scr
       navigationTimeoutMs: config.browser.navigationTimeoutMs,
       totalTimeoutMs: config.deep.urlTimeoutMs,
       configDirectory: path.join(config.deep.repoRoot, 'config'),
+      allowPrivateNetwork: config.deep.allowPrivateNetwork,
     });
     logger.info(`[DEEP ${summary.overallVerdict}] ${url} (${device}) ${JSON.stringify(summary.verdictCounts)}`);
     return summary;

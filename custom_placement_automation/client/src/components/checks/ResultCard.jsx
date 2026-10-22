@@ -1,6 +1,7 @@
 import { Badge } from '../ui';
 import ScreenshotGallery from './ScreenshotGallery.jsx';
 import DiagnosticsPanel from './DiagnosticsPanel.jsx';
+import DeepResults from './DeepResults.jsx';
 import { formatBox, formatDuration } from '../../utils/format.js';
 import { reasonLabel } from '../../utils/reasons.js';
 import { CHECK_TYPE } from '../../utils/checkTypes.js';
@@ -22,6 +23,7 @@ export default function ResultCard({ result, index, type }) {
     <article className={`result result-${status}`}>
       <header className="result-header">
         <Badge tone={status}>{status.toUpperCase()}</Badge>
+        {result.deep && <Badge tone={`deep-${result.deep.overallVerdict === 'PASS' ? 'pass' : result.deep.overallVerdict === 'FAIL' ? 'fail' : 'mixed'}`}>Deep · {result.deep.verdictCounts?.PASS ?? 0}/23 pass</Badge>}
         <span className="muted">#{index + 1}</span>
         <a className="result-url" href={result.url} target="_blank" rel="noreferrer">
           {result.url}
@@ -30,6 +32,7 @@ export default function ResultCard({ result, index, type }) {
 
       <div className="result-body">
         <div>
+          <span className="block-eyebrow">Placement check</span>
           {result.reasons.length > 0 && (
             <div className="reasons">
               {result.reasons.map((reason) => (
@@ -71,6 +74,8 @@ export default function ResultCard({ result, index, type }) {
 
         <ScreenshotGallery screenshots={result.screenshots} labels={result.screenshotLabels} />
       </div>
+
+      <DeepResults deep={result.deep} />
     </article>
   );
 }

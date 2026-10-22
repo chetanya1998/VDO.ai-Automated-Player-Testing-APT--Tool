@@ -65,6 +65,8 @@ const config = {
     enginePath: path.resolve(repoRoot, process.env.DEEP_ENGINE_PATH || 'dist/src/deep/index.js'),
     observeMs: envNumber('DEEP_OBSERVE_MS', 15000),
     urlTimeoutMs: envNumber('DEEP_URL_TIMEOUT_MS', 90000),
+    // Off by default: deep tests refuse private-network addresses unless staging pages need them.
+    allowPrivateNetwork: process.env.DEEP_ALLOW_PRIVATE_NETWORK === 'true',
   },
 
   checks: {

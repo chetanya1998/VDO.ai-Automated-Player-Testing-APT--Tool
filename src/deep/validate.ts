@@ -173,7 +173,15 @@ export function caseSummary(check: CheckResult, draftPolicies: readonly string[]
     if (typeof record.firstFailure === "string") return readable(record.firstFailure);
     if (typeof record.state === "string") return readable(record.state);
     if (typeof record.detail === "string") return record.detail;
+    const expected = check.expected !== null && typeof check.expected === "object" && !Array.isArray(check.expected) ? check.expected : {};
+    const differences = Object.entries(expected).flatMap(([key, value]) => {
+      const actual = record[key];
+      const primitive = (item: unknown) => item === null || ["string", "number", "boolean"].includes(typeof item);
+      return primitive(value) && primitive(actual) && actual !== value ? [`${readable(key)}: expected ${String(value)}, observed ${String(actual)}`] : [];
+    });
+    if (differences.length > 0) return differences.slice(0, 3).join("; ");
   }
+  if (check.verdict === "FAIL" || check.verdict === "WARNING") return "Did not match the expected behaviour; see the observed detail.";
   if (check.verdict === "UNKNOWN") {
     if (check.testCaseId === "TC-23") return "Needs an approved infinite-scroll/SPA navigation for this site; only one article was visited.";
     const policy = CASE_POLICIES[check.testCaseId];

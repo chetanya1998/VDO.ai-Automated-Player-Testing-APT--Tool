@@ -1,5 +1,6 @@
 import { Badge } from '../ui';
 import ResultCard from './ResultCard.jsx';
+import VerdictCounts from './VerdictCounts.jsx';
 import { checkTypeLabel } from '../../utils/checkTypes.js';
 import { formatDateTime, formatDuration, formatScroll, runStatus } from '../../utils/format.js';
 
@@ -12,6 +13,7 @@ export default function RunResults({ run }) {
       <header className="run-header">
         <Badge tone={status}>{status.toUpperCase()}</Badge>
         <Badge tone="neutral">{checkTypeLabel(run.type)}</Badge>
+        {run.deep && <Badge tone="accent">Deep test</Badge>}
         <strong>{run.tag}</strong>
         <span className="muted">
           {run.domain} · {run.device}
@@ -20,11 +22,27 @@ export default function RunResults({ run }) {
           {formatDateTime(run.startedAt)} · {formatDuration(new Date(run.finishedAt) - new Date(run.startedAt))}
         </span>
         {run.scroll && <span className="muted">{formatScroll(run.scroll)}</span>}
-        <span className="run-counts">
-          <span className="text-pass">{run.passCount} pass</span> · <span className="text-fail">{run.failCount} fail</span> ·{' '}
-          <span className="text-error">{run.errorCount} error</span> of {total}
-        </span>
       </header>
+
+      <div className="run-stats">
+        <div className="stat-block">
+          <span className="block-eyebrow">Placement</span>
+          <div className="stat-tiles">
+            <div className="stat-tile"><b>{total}</b><span>URLs</span></div>
+            <div className="stat-tile tone-pass"><b>{run.passCount}</b><span>Pass</span></div>
+            <div className="stat-tile tone-fail"><b>{run.failCount}</b><span>Fail</span></div>
+            <div className="stat-tile tone-error"><b>{run.errorCount}</b><span>Error</span></div>
+          </div>
+        </div>
+        {run.deep && run.deepSummary && (
+          <div className="stat-block">
+            <span className="block-eyebrow">
+              Deep test · {run.deepSummary.urls} URL{run.deepSummary.urls === 1 ? '' : 's'} × 23 cases
+            </span>
+            <VerdictCounts counts={run.deepSummary.verdictCounts} />
+          </div>
+        )}
+      </div>
 
       <div className="results">
         {run.results.map((result, i) => (

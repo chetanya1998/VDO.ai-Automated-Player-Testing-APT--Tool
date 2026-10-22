@@ -2,7 +2,9 @@
 
 A local tool for checking vdo.ai player placement on publisher pages before a site goes live. You give it a domain, a tag, a list of article URLs and either a `vdo.ai.js` build or a `style.css`. It opens each page in Chromium, applies your code, checks whether the player was placed, and keeps a report with screenshots.
 
-The local backend now requires PostgreSQL (`DATABASE_URL` in `server/.env`). See [the 23-case mapping, implementation stages and local setup](LOCAL-VALIDATION-PLAN.md). The 23-case validators are not yet connected to this placement dashboard.
+The local backend now requires PostgreSQL (`DATABASE_URL` in `server/.env`). See [the 23-case mapping, implementation stages and local setup](LOCAL-VALIDATION-PLAN.md).
+
+An optional **deep test** validates all 23 player test cases on each URL, on top of the placement check. See [Deep test](#deep-test-all-23-cases).
 
 ## Features
 
@@ -57,11 +59,23 @@ Every result also includes:
   - console output;
   - plain-language hints explaining what probably went wrong.
 
+### Deep test (all 23 cases)
+
+Turn on **Automated player testing — deep** in step 4 of the form. The placement check runs exactly as before; afterwards each URL is opened again in a separate Chromium, with the same device, tag and your `vdo.ai.js` or `style.css` applied, and validated against TC-1 to TC-23.
+
+- **Engine:** the repository's validator rules (`src/rules`, `src/deep` in the repository root), compiled once with `pnpm install && pnpm build` in the repository root. `npm run setup` does this for you. `/api/ready` reports `deep.available`; the toggle is disabled until the engine is built.
+- **Results per URL:** a verdict bar, filter chips and 23 case tiles grouped as *Tag & installation*, *Logger & events*, *Ads & viewability* and *Devices & navigation*. Click a tile for the reason, expected vs observed values and evidence count. Likely causes and limitations are listed below.
+- **Run totals:** pass/fail/warning/unknown counts across every URL × 23 cases, also shown in History (Depth column, *Deep tests* filter) and in the PDF.
+- **Verdicts are honest:** PASS needs captured evidence and a confirmed policy. The repository policies are still drafts, so rules that require a confirmed policy report **UNKNOWN** with the reason, never a guessed PASS. TC-23 needs an approved infinite-scroll/SPA navigation for the site and reports UNKNOWN until one exists. Mobile is Chromium emulation and cannot certify real iOS/Safari.
+- **Network:** deep tests allow public internet traffic but refuse private-network addresses. Set `DEEP_ALLOW_PRIVATE_NETWORK=true` in `server/.env` to test internal staging servers.
+- **Time:** about 15 s of observation per URL and device (`DEEP_OBSERVE_MS`), capped at `DEEP_URL_TIMEOUT_MS` (default 90 s).
+
 ### History
 
 - Every run is saved locally and listed in **History**.
 - **Re-run:** fills the form with that run's settings and stored script so you can change something and run it again.
-- **PDF:** downloads a report for the run, with all results and screenshots.
+- **PDF:** downloads a report for the run, with all results and screenshots, plus the 23-case table for deep runs.
+- **Re-run** keeps the deep test setting.
 - **Delete / Clear all:** removes runs and their screenshots.
 
 ## Quick start
@@ -112,6 +126,7 @@ server/                 Express API + Playwright runner
       database          durable jobs, reports and exclusive worker ownership
       scriptStore       uploaded scripts (used by Re-run)
       pdfReport         PDF reports (separate headless Chromium)
+      deepValidation    loads the compiled 23-case engine and runs the deep test per URL
   storage/              reports.json, screenshots/, scripts/  (created automatically, not in git)
 client/                 React (Vite) UI
   src/
@@ -129,9 +144,9 @@ implementation/         planning notes
 | GET | `/api/health` | Health check |
 | GET | `/api/ready` | Database, queue and Chromium installation readiness |
 | GET | `/api/settings` | Default scroll settings, limits and the per-URL time limit |
-| POST | `/api/placement-checks` | Start a check and return a job |
+| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test) |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
-| GET | `/api/history` | List runs (`?page=&pageSize=`) |
+| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`) |
 | GET | `/api/history/:runId` | One run with its results |
 | GET | `/api/history/:runId/pdf` | Download the run as a PDF |
 | DELETE | `/api/history/:runId` | Delete one run and its screenshots |

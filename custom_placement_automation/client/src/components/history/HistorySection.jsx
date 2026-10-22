@@ -17,6 +17,7 @@ const FILTERS = [
   { value: 'status:error', label: 'Errors' },
   { value: `type:${CHECK_TYPE.JS}`, label: 'Custom placement' },
   { value: `type:${CHECK_TYPE.CSS}`, label: 'CSS checks' },
+  { value: 'mode:deep', label: 'Deep tests' },
 ];
 
 const BASE_COLUMNS = [
@@ -43,6 +44,23 @@ const BASE_COLUMNS = [
       </span>
     ),
   },
+  {
+    key: 'mode',
+    header: 'Depth',
+    render: (run) =>
+      run.deep ? (
+        <span className="depth-cell">
+          <span className="depth-tag">Deep</span>
+          {run.deepSummary && (
+            <small>
+              {run.deepSummary.verdictCounts.PASS}/{run.deepSummary.cases} pass · {run.deepSummary.verdictCounts.FAIL} fail
+            </small>
+          )}
+        </span>
+      ) : (
+        <span className="muted">Standard</span>
+      ),
+  },
   { key: 'device', header: 'Devices', render: (run) => run.device[0].toUpperCase() + run.device.slice(1) },
   { key: 'startedAt', header: 'Started', render: (run) => <time title={formatDateTime(run.startedAt)}>{formatStarted(run.startedAt)}</time> },
   {
@@ -62,6 +80,7 @@ const toRerunSettings = (run) => ({
   urls: run.results.map((result) => result.url),
   scroll: run.scroll ?? null,
   script: run.script ?? null,
+  deep: run.deep === true,
   startedAt: run.startedAt,
 });
 
@@ -96,6 +115,7 @@ export default function HistorySection({ refreshKey, onRerun }) {
       q: debouncedQuery,
       status: filterKind === 'status' ? filterValue : '',
       type: filterKind === 'type' ? filterValue : '',
+      mode: filterKind === 'mode' ? filterValue : '',
     })
       .then((next) => {
         if (cancelled) return;

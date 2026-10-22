@@ -32,6 +32,12 @@ Paths below are existing source modules under the repository's root src/ directo
 | TC-22 | loaded and pageview once per article URL | rules/articles.ts; rules/events.ts |
 | TC-23 | Infinite scroll and SPA scenario | rules/articles.ts |
 
+## Deep test status (22 October 2026)
+
+All 23 cases are now connected to the placement dashboard as an opt-in **deep test** (see README). The engine in the repository's `src/deep` reuses the existing capture and TC rule modules unchanged; TC-18, TC-19 and TC-20 are produced by thin adapters over `profile/tag-identity.ts` and `logger/browser-payload.ts`, which had no check emitter before. Placement PASS results are still never counted as any of the 23 cases; deep verdicts are reported separately.
+
+Verified locally against the repository's synthetic fixture pages (desktop and mobile emulation) through the real queue, PostgreSQL, dashboard and PDF. Not yet verified against a live publisher page, and the repository policies are drafts, so policy-dependent cases report UNKNOWN.
+
 ## Executable chunks
 
 1. **Local execution foundation (implemented in this change):** PostgreSQL jobs/reports, one worker per database schema, bounded admission, sequential devices within each job, restart recovery, retained completed-device results, screenshot hashes, loopback-only server, request validation and readiness endpoint. Legacy reports.json is imported once without modifying the source file. Queued jobs resume; interrupted jobs fail explicitly instead of being replayed.

@@ -50,15 +50,36 @@ export default function HomePage() {
         ? { tone: 'ok', label: 'Chromium connected' }
         : { tone: 'down', label: apiUp ? 'Setup required' : 'Connecting…' };
 
+  const systemItems = [
+    { label: 'API', ok: apiUp === true, detail: apiUp === false ? 'Unreachable' : apiUp ? 'Connected' : 'Connecting…' },
+    { label: 'Database', ok: Boolean(readiness?.database), detail: readiness ? (readiness.database ? 'PostgreSQL ready' : 'Unavailable') : '—' },
+    { label: 'Chromium', ok: Boolean(readiness?.browser?.launchable), detail: readiness?.browser?.launchable ? `Version ${readiness.browser.version ?? 'ready'}` : readiness ? 'Not launchable' : '—' },
+    { label: 'Deep test engine', ok: Boolean(readiness?.deep?.available), detail: readiness?.deep ? (readiness.deep.available ? '23 cases ready' : 'Not built') : '—', optional: true },
+    { label: 'Queue', ok: Boolean(readiness && !readiness.queue?.stopping), detail: readiness?.queue ? `${readiness.queue.active} running · ${readiness.queue.queued} queued` : '—' },
+  ];
+
   return (
     <div className="app">
       <header className="page-header">
         <div>
+          <span className="block-eyebrow">vdo.ai · Automated player testing</span>
           <h1>Placement automation</h1>
-          <p>Configure and run placement checks across your site.</p>
+          <p>Check custom placement code on real publisher pages, then optionally validate all 23 player test cases.</p>
         </div>
         <StatusPill tone={systemPill.tone}>{systemPill.label}</StatusPill>
       </header>
+
+      <section className="system-strip" aria-label="System status">
+        {systemItems.map((item) => (
+          <div key={item.label} className={`system-item ${item.ok ? 'ok' : item.optional ? 'warn' : 'down'}`}>
+            <span className="system-dot" aria-hidden="true" />
+            <span>
+              <strong>{item.label}</strong>
+              <small>{item.detail}</small>
+            </span>
+          </div>
+        ))}
+      </section>
 
       <main className="sections">
         {readiness && !readiness.ready && <Alert tone="error">
@@ -72,6 +93,7 @@ export default function HomePage() {
           onReset={() => setPrefill(null)}
           disabled={running || !readiness?.ready}
           unavailable={!readiness?.ready}
+          deepEngine={readiness?.deep ?? null}
           onStarted={handleStarted}
         />
         {currentJob && <CurrentCheck key={currentJob.id} job={currentJob} onFinished={handleFinished} />}

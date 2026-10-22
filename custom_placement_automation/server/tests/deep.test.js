@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
+import config from '../src/config/index.js';
 import { deepReadiness, runDeepCheck, summarizeDeepRun } from '../src/services/deepValidation.service.js';
 
 test('deep option must be a boolean and readiness reports the deep engine separately', async () => {
@@ -21,7 +22,7 @@ test('the compiled 23-case engine loads from the repository build', { skip: (awa
   assert.deepEqual(await deepReadiness(), { available: true });
 });
 
-test('a deep check that cannot run returns 23 unevaluated cases instead of failing the job', { skip: (await deepReadiness()).available ? false : 'run pnpm build in the repository root first' }, async () => {
+test('a deep check that cannot run returns 23 unevaluated cases instead of failing the job', { skip: !(await deepReadiness()).available ? 'run pnpm build in the repository root first' : config.deep.allowPrivateNetwork ? 'DEEP_ALLOW_PRIVATE_NETWORK is on' : false }, async () => {
   const summary = await runDeepCheck({ url: 'http://127.0.0.1:9/article', domain: '127.0.0.1', tag: 'v-example', device: 'desktop', type: 'vdo.ai.js', script: '/* */' });
   assert.equal(summary.executionState, 'errored');
   assert.equal(summary.verdictCounts.UNKNOWN, 23);
