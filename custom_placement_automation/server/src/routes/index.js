@@ -4,16 +4,18 @@ import historyRoutes from './history.routes.js';
 import config from '../config/index.js';
 import { getDatabase } from '../services/database.service.js';
 import { queueState } from '../services/jobQueue.service.js';
-import { chromiumInstalled } from '../services/browser.service.js';
+import { browserReadiness } from '../services/browser.service.js';
 
 const router = Router();
 
 router.get('/health', (_req, res) => res.json({ status: 'ok' }));
 router.get('/ready', async (_req, res) => {
-  const database = await getDatabase().ping();
+  let database = false;
+  try { database = await getDatabase().ping(); } catch { /* Report unavailable without claiming readiness. */ }
   const queue = queueState();
-  const browserInstalled = chromiumInstalled();
-  res.status(database && browserInstalled && !queue.stopping ? 200 : 503).json({ database, browserInstalled, queue });
+  const browser = await browserReadiness();
+  const ready = database && browser.launchable && !queue.stopping;
+  res.status(ready ? 200 : 503).json({ ready, database, browserInstalled: browser.installed, browser, queue });
 });
 router.get('/settings', (_req, res) =>
   res.json({

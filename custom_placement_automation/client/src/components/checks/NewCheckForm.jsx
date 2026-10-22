@@ -49,7 +49,7 @@ const parseUrls = (text) =>
     .map((u) => u.trim())
     .filter(Boolean);
 
-export default function NewCheckForm({ disabled, onStarted, prefill, onReset }) {
+export default function NewCheckForm({ disabled, unavailable = false, onStarted, prefill, onReset }) {
   const [type, setType] = useState(prefill?.type ?? CHECK_TYPE.JS);
   const [domain, setDomain] = useState(prefill?.domain ?? '');
   const [tag, setTag] = useState(prefill?.tag ?? '');
@@ -334,7 +334,7 @@ export default function NewCheckForm({ disabled, onStarted, prefill, onReset }) 
             ))}
           </div>
           <Button type="submit" variant="primary" className="run-button" disabled={busy}>
-            {submitting ? 'Starting…' : disabled ? 'Check running…' : 'Run check'}
+            {submitting ? 'Starting…' : unavailable ? 'Waiting for backend readiness' : disabled ? 'Check running…' : 'Run check'}
             <ArrowRightIcon />
           </Button>
         </footer>

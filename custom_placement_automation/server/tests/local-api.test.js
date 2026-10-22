@@ -21,6 +21,12 @@ test('real HTTP server restricts origins and validates publisher URLs before que
         body: JSON.stringify({domain:'example.com', tag:'v-example', devices:['desktop'], urls:[url]}) });
       assert.equal(response.status, 400);
     }
-    assert.equal((await fetch(`${base}/api/ready`)).status, 503, 'readiness must fail without an initialized database');
+    const readiness = await fetch(`${base}/api/ready`);
+    assert.equal(readiness.status, 503, 'readiness must fail without an initialized database');
+    const state = await readiness.json();
+    assert.equal(state.ready, false);
+    assert.equal(state.database, false);
+    assert.equal(typeof state.browser.installed, 'boolean');
+    assert.equal(typeof state.browser.launchable, 'boolean');
   } finally { await new Promise(resolve => server.close(resolve)); }
 });

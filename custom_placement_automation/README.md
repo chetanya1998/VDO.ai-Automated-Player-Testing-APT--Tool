@@ -76,7 +76,9 @@ The script checks for Node.js 20+ (installing it through nvm if it's missing or 
 
 Open **http://localhost:5173**. Full instructions, including troubleshooting, are in [SETUP.md](SETUP.md).
 
-Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and presence of Chromium; actual browser launch still requires a successful run.
+Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and actual Chromium launch (cached for 30 seconds). The dashboard polls readiness and enables checks only when all three are ready. Placement checks and PDFs both use the bundled full Chromium executable.
+
+If Chromium is missing, run `node server/node_modules/playwright/cli.js install chromium` from this folder in a normal terminal. The running dashboard detects the installation automatically. A production-built dashboard is also served directly by the backend at `http://127.0.0.1:3000/` when `client/dist` exists; Vite development mode remains on port 5173.
 
 | Command (project root) | Does |
 |---|---|

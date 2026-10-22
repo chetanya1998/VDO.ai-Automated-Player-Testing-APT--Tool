@@ -22,7 +22,7 @@ function getPdfBrowser() {
   if (!pdfBrowserPromise) {
     logger.info('Launching headless Chromium for PDF reports');
     pdfBrowserPromise = chromium
-      .launch({ headless: true })
+      .launch({ channel: 'chromium', headless: true, timeout: 10000 })
       .then((browser) => {
         browser.on('disconnected', () => {
           pdfBrowserPromise = null;
