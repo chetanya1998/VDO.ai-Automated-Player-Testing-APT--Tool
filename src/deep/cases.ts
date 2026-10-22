@@ -1,0 +1,122 @@
+import type { CheckResult, Evidence, JsonValue, Verdict } from "../contracts.js";
+import { parseBrowserLoggerPayload, summarizePhysicalLoadPayloads, type EventAliasProfile, type ParsedBrowserLoggerPayload } from "../logger/browser-payload.js";
+import { validateTagSet, type Product, type SiteProfileCatalog } from "../profile/tag-identity.js";
+
+// TC-18, TC-19 and TC-20 have parsing/identity helpers but no CheckResult emitter in the
+// validator report. These adapters turn the existing helpers' results into checks for deep tests.
+
+export interface LoggerCaseInput {
+  evidence: readonly Evidence[];
+  aliases: EventAliasProfile;
+  deviceId: string;
+  articleEpochId: string;
+  tagName: string;
+  captureComplete: boolean;
+}
+
+interface LoggerRecord {
+  evidenceId: string;
+  payload: ParsedBrowserLoggerPayload;
+}
+
+function loggerRecords(input: LoggerCaseInput): LoggerRecord[] {
+  return input.evidence
+    .filter((item) => item.source === "browser_logger")
+    .map((item) => {
+      const fields = typeof item.data.fields === "object" && item.data.fields !== null && !Array.isArray(item.data.fields) ? item.data.fields : null;
+      const malformed = item.data.parseState === "malformed" || item.data.parseState === "empty" || fields === null;
+      return { evidenceId: item.evidenceId, payload: parseBrowserLoggerPayload(malformed ? null : JSON.stringify(fields), "application/json", input.aliases) };
+    });
+}
+
+function check(input: LoggerCaseInput, testCaseId: "TC-18" | "TC-19" | "TC-20", verdict: Verdict, expected: JsonValue, observed: JsonValue, evidenceIds: string[]): CheckResult {
+  return {
+    testCaseId,
+    verdict,
+    category: verdict === "PASS" || verdict === "NOT_APPLICABLE" ? "NONE" : verdict === "UNKNOWN" ? "TOOLING" : "IMPLEMENTATION",
+    scope: { deviceId: input.deviceId, articleEpochId: input.articleEpochId, tagName: input.tagName },
+    expected,
+    observed,
+    evidenceIds,
+  };
+}
+
+const PRODUCT_PREFIXES: Record<string, Product> = { v: "video", c: "carousel", s: "story", b: "banner" };
+
+export function productForTag(tagName: string): Product | null {
+  return PRODUCT_PREFIXES[tagName.split("-", 1)[0] ?? ""] ?? null;
+}
+
+export function validateTagDomain(input: LoggerCaseInput & { targetUrl: string; domain: string }): CheckResult {
+  const product = productForTag(input.tagName);
+  const records = loggerRecords(input);
+  if (product === null) return check(input, "TC-18", "FAIL", { productPrefixes: Object.keys(PRODUCT_PREFIXES) }, {
+    state: "tag_prefix_not_approved",
+    detail: `${input.tagName} does not start with an approved v/c/s/b product prefix.`,
+  }, records.map((item) => item.evidenceId));
+  const host = new URL(input.targetUrl).hostname.toLowerCase();
+  const catalog: SiteProfileCatalog = {
+    schemaVersion: 1,
+    status: "synthetic_draft",
+    productPrefixes: { v: "video", c: "carousel", s: "story", b: "banner" },
+    sites: [{
+      mappingId: `deep-input-${input.domain}`,
+      approvedHosts: [...new Set([host, input.domain, `www.${input.domain}`])],
+      rootDomain: input.domain,
+      acceptedDomainNames: [...new Set([input.domain, `www.${input.domain}`, host])],
+      allowMultipleTags: false,
+      tags: [{
+        baseTag: input.tagName,
+        allowedTagNames: [input.tagName],
+        product,
+        placement: "unconfirmed",
+        floatingMode: "unconfirmed",
+        ruleSupport: product === "video" ? "supported" : "unsupported",
+      }],
+    }],
+  };
+  const pairs = [...new Map(records.map(({ payload }) => {
+    const key = `${payload.fields.tagName ?? ""}\u0000${payload.fields.domainName ?? ""}`;
+    return [key, { tagName: payload.fields.tagName, domainName: payload.fields.domainName }];
+  })).values()];
+  const result = validateTagSet({ siteUrl: input.targetUrl, observations: pairs }, catalog);
+  const verdict: Verdict = result.verdict === "PASS" && !input.captureComplete ? "UNKNOWN" : result.verdict;
+  return check(input, "TC-18", verdict, {
+    mappingSource: "deep_test_input",
+    domain: input.domain,
+    tagName: input.tagName,
+    product,
+  }, {
+    ...(pairs.length === 0 ? { state: "no_logger_identity_observed" } : {}),
+    observations: pairs,
+    identities: result.identities.map((item) => ({ verdict: item.verdict, reason: item.reason, detail: item.detail })),
+    detail: result.detail,
+  }, records.map((item) => item.evidenceId));
+}
+
+export function validateDependencyBuild(input: LoggerCaseInput): CheckResult {
+  const records = loggerRecords(input);
+  const summary = summarizePhysicalLoadPayloads(records.map((item) => item.payload));
+  const changed = summary.diagnostics.some((item) => item.code === "dep_changed");
+  const verdict: Verdict = changed ? "FAIL" : summary.depValues.length === 0 || !input.captureComplete ? "UNKNOWN" : "PASS";
+  return check(input, "TC-19", verdict, { depValuesPerPhysicalLoad: 1 }, {
+    ...(summary.depValues.length === 0 ? { state: records.length === 0 ? "no_logger_requests_observed" : "dep_field_not_observed" } : {}),
+    depValues: summary.depValues,
+    tagNames: summary.tagNames,
+    diagnostics: summary.diagnostics.map((item) => ({ code: item.code, severity: item.severity, detail: item.detail })),
+  }, records.map((item) => item.evidenceId));
+}
+
+export function validateEventSanity(input: LoggerCaseInput): CheckResult {
+  const records = loggerRecords(input);
+  const problems = records.flatMap(({ evidenceId, payload }) => payload.diagnostics.map((item) => ({ evidenceId, code: item.code, field: item.field, detail: item.detail })));
+  const verdict: Verdict = records.length === 0 ? "UNKNOWN" : problems.length > 0 ? "WARNING" : input.captureComplete ? "PASS" : "UNKNOWN";
+  const rawEvents = [...new Set(records.flatMap(({ payload }) => payload.rawEvent === null ? [] : [payload.rawEvent]))];
+  return check(input, "TC-20", verdict, { requiredNonEmptyFields: ["event", "tagName", "domainName", "page_url", "dep"], eventVocabulary: "configured aliases" }, {
+    ...(records.length === 0 ? { state: "no_logger_requests_observed" } : {}),
+    loggerRequests: records.length,
+    rawEvents,
+    unknownEvents: [...new Set(problems.filter((item) => item.code === "unknown_event").map((item) => item.detail))],
+    problems: problems.slice(0, 50),
+  }, problems.length > 0 ? [...new Set(problems.map((item) => item.evidenceId))] : records.map((item) => item.evidenceId));
+}
