@@ -13,3 +13,5 @@ VDO_VALIDATOR_BROWSER_IMAGE_DIGEST=sha256:<running-image-digest>
 The acceptance file is parsed at API startup. It must contain fresh evidence for every required deployment control and bind the approval to exact immutable profile hashes, HTTPS origins and the browser image digest. Missing, stale, incomplete or mismatched acceptance keeps production submissions unavailable. Fixture profiles do not use this gate.
 
 This configuration gate does not replace the isolated browser service or deployed acceptance suite. Do not create an acceptance document until the actual platform has produced and retained the required evidence.
+
+The phased infrastructure design and operator procedure for self-hosting this application are documented in [the Coolify self-hosting plan](../docs/coolify-self-hosting.md).
