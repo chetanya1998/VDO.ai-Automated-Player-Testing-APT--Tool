@@ -222,7 +222,7 @@ erDiagram
     validator_runs ||--o{ validator_findings : produces
     validator_runs ||--o{ validator_artifact_refs : references
     validator_batches ||--o{ validator_batch_items : contains
-    validator_batch_items }o--|| validator_runs : "creates"
+    validator_batch_items |o--o| validator_runs : "creates"
 
     validator_runs {
       text run_id PK
