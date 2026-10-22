@@ -5,6 +5,7 @@ import config from '../config/index.js';
 import { getDatabase } from '../services/database.service.js';
 import { queueState } from '../services/jobQueue.service.js';
 import { browserReadiness } from '../services/browser.service.js';
+import { deepReadiness } from '../services/deepValidation.service.js';
 
 const router = Router();
 
@@ -15,11 +16,14 @@ router.get('/ready', async (_req, res) => {
   const queue = queueState();
   const browser = await browserReadiness();
   const ready = database && browser.launchable && !queue.stopping;
-  res.status(ready ? 200 : 503).json({ ready, database, browserInstalled: browser.installed, browser, queue });
+  // Deep test availability is reported separately; standard checks do not depend on it.
+  const deep = await deepReadiness();
+  res.status(ready ? 200 : 503).json({ ready, database, browserInstalled: browser.installed, browser, queue, deep });
 });
 router.get('/settings', (_req, res) =>
   res.json({
     urlTimeoutMs: config.placement.urlTimeoutMs,
+    deepUrlTimeoutMs: config.deep.urlTimeoutMs,
     scroll: {
       stepViewportRatio: config.placement.lazyScroll.stepViewportRatio,
       intervalMs: config.placement.lazyScroll.intervalMs,

@@ -75,6 +75,38 @@ function describeEvent(run, result) {
   return 'received';
 }
 
+const VERDICT_CLASS = { PASS: 'pass', FAIL: 'fail', WARNING: 'warn', UNKNOWN: 'unknown', NOT_APPLICABLE: 'na' };
+const VERDICT_LABEL = { PASS: 'Pass', FAIL: 'Fail', WARNING: 'Warning', UNKNOWN: 'Unknown', NOT_APPLICABLE: 'N/A' };
+const VERDICT_ORDER = ['PASS', 'FAIL', 'WARNING', 'UNKNOWN', 'NOT_APPLICABLE'];
+
+function renderVerdictCounts(counts) {
+  return `<div class="deep-counts">${VERDICT_ORDER.map(
+    (verdict) => `<span class="v ${VERDICT_CLASS[verdict]}"><b>${counts?.[verdict] ?? 0}</b> ${VERDICT_LABEL[verdict]}</span>`,
+  ).join('')}</div>`;
+}
+
+function renderDeep(deep) {
+  if (!deep) return '';
+  const causes = deep.probableCauses ?? [];
+  return `
+    <div class="deep">
+      <h3>Deep test · 23 cases <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
+      ${renderVerdictCounts(deep.verdictCounts)}
+      ${
+        deep.cases?.length
+          ? `<table class="cases"><thead><tr><th>Case</th><th>Check</th><th>Result</th><th>Why</th></tr></thead><tbody>${deep.cases
+              .map(
+                (c) => `<tr><td>${escapeHtml(c.testCaseId)}</td><td>${escapeHtml(c.title)}</td><td><span class="badge ${VERDICT_CLASS[c.verdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td><td>${escapeHtml(c.summary)}</td></tr>`,
+              )
+              .join('')}</tbody></table>`
+          : ''
+      }
+      ${causes.length ? `<p class="deep-h">Likely causes${causes[0].rules === 'draft' ? ' (draft RCA rules)' : ''}</p><ul class="hints">${causes.map((c) => `<li>${escapeHtml(c.testCaseId)}: ${escapeHtml(c.summary)} · owner: ${escapeHtml(c.owner)}</li>`).join('')}</ul>` : ''}
+      ${deep.executionErrors?.length ? `<p class="deep-h">Errors</p><ul class="hints">${deep.executionErrors.map((e) => `<li>${escapeHtml(e.message)}</li>`).join('')}</ul>` : ''}
+      ${deep.limitations?.length ? `<p class="deep-h">Limitations</p><ul class="notes">${deep.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
+    </div>`;
+}
+
 function renderResult(run, result, index, images) {
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
@@ -116,6 +148,7 @@ function renderResult(run, result, index, images) {
             .join('')}</div>`
         : ''
     }
+    ${renderDeep(result.deep)}
   </section>`;
 }
 
@@ -129,6 +162,7 @@ function renderReport(run, imagesByResult) {
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
     ['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default'],
+    ['Deep test', run.deep ? 'On (all 23 cases per URL)' : 'Off'],
   ];
 
   return `<!doctype html>
@@ -144,6 +178,7 @@ function renderReport(run, imagesByResult) {
   .meta { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 3px 14px; margin: 0 0 14px; padding: 10px 12px; background: #f4f6f8; border-radius: 6px; }
   .meta dt { color: #5c6570; }
   .meta dd { margin: 0; overflow-wrap: anywhere; }
+  .section-title { font-size: 13px; margin: 0 0 6px; }
   .summary { display: flex; gap: 10px; margin-bottom: 16px; }
   .summary div { flex: 1; padding: 8px 10px; border: 1px solid #dde1e6; border-radius: 6px; }
   .summary b { display: block; font-size: 16px; }
@@ -166,6 +201,19 @@ function renderReport(run, imagesByResult) {
   figure { margin: 0; }
   img { display: block; width: 100%; max-height: 110mm; object-fit: contain; object-position: top; border: 1px solid #dde1e6; border-radius: 4px; background: #f4f6f8; }
   figcaption { color: #5c6570; font-size: 9.5px; margin-top: 2px; }
+  .badge.warn { color: #9a6700; background: #fff4d6; } .badge.unknown { color: #475467; background: #eef0f3; } .badge.na { color: #475467; background: #f4f6f8; }
+  .deep { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #dde1e6; }
+  .deep h3 { margin: 0 0 6px; font-size: 12px; display: flex; gap: 6px; align-items: center; }
+  .deep-h { margin: 8px 0 2px; font-weight: 600; }
+  .deep-counts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .deep-counts .v { padding: 2px 8px; border-radius: 999px; background: #f4f6f8; font-size: 9.5px; }
+  .deep-counts .v.pass b { color: #1a7f37; } .deep-counts .v.fail b { color: #c62828; } .deep-counts .v.warn b { color: #9a6700; }
+  table.cases { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  table.cases th, table.cases td { text-align: left; vertical-align: top; padding: 3px 5px; border-bottom: 1px solid #eef0f3; }
+  table.cases th { color: #5c6570; font-weight: 600; }
+  table.cases tr { break-inside: avoid; }
+  table.cases td:first-child { white-space: nowrap; color: #5c6570; }
+  .notes { margin: 2px 0 0; padding-left: 16px; color: #5c6570; }
 </style>
 </head>
 <body>
@@ -178,6 +226,7 @@ function renderReport(run, imagesByResult) {
     <div class="fail"><b>${run.failCount}</b>Fail</div>
     <div class="error"><b>${run.errorCount}</b>Error</div>
   </div>
+  ${run.deep && run.deepSummary ? `<h2 class="section-title">Deep test totals · ${run.deepSummary.urls} URL(s) × 23 cases</h2>${renderVerdictCounts(run.deepSummary.verdictCounts)}` : ''}
   ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i])).join('')}
 </body>
 </html>`;

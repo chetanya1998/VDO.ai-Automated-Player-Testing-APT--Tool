@@ -19,6 +19,7 @@ const envInteger = (name, fallback, max) => {
 };
 
 const clientDistDir = path.resolve(serverRoot, '../client/dist');
+const repoRoot = path.resolve(serverRoot, '../..');
 
 const config = {
   port: Number(process.env.PORT) || 3000,
@@ -57,6 +58,13 @@ const config = {
       intervalMs: envNumber('SCROLL_INTERVAL_MS', 1600),
       maxSteps: 2,
     },
+  },
+
+  deep: {
+    repoRoot,
+    enginePath: path.resolve(repoRoot, process.env.DEEP_ENGINE_PATH || 'dist/src/deep/index.js'),
+    observeMs: envNumber('DEEP_OBSERVE_MS', 15000),
+    urlTimeoutMs: envNumber('DEEP_URL_TIMEOUT_MS', 90000),
   },
 
   checks: {

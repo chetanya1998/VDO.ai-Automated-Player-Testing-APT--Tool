@@ -16,6 +16,12 @@ const DEVICE_PROFILES = {
 
 export const SUPPORTED_DEVICES = Object.keys(DEVICE_PROFILES);
 
+// The same device settings for the deep test's separate browser.
+export function deviceContextOptions(device) {
+  const { viewport, userAgent, deviceScaleFactor, isMobile, hasTouch } = DEVICE_PROFILES[device];
+  return Object.fromEntries(Object.entries({ viewport, userAgent, deviceScaleFactor, isMobile, hasTouch }).filter(([, value]) => value !== undefined));
+}
+
 function getBrowser() {
   if (closing) throw new Error('Browser service is shutting down');
   if (!browserPromise) {

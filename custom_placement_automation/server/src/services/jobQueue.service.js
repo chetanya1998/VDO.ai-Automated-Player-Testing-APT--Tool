@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import config from '../config/index.js';
 import { runPlacementChecks } from './placementRunner.service.js';
+import { runDeepCheck } from './deepValidation.service.js';
 import { saveRun } from './results.service.js';
 import logger from '../utils/logger.js';
 import { getDatabase } from './database.service.js';
@@ -40,6 +41,7 @@ function toPublicJob(job) {
     domain: input.domain,
     devices: input.devices,
     scroll: input.scroll,
+    deep: input.deep === true,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
 }
@@ -69,6 +71,24 @@ async function processJob(job) {
             if (stopping) throw new Error('Execution interrupted by server shutdown');
           },
         });
+
+        // Deep test: after the unchanged placement check, run all 23 cases for each URL.
+        if (input.deep) {
+          for (const result of run.results) {
+            if (stopping) throw new Error('Execution interrupted by server shutdown');
+            result.deep = await runDeepCheck({
+              url: result.url,
+              domain: input.domain,
+              tag: input.tag,
+              device,
+              type: input.type,
+              script,
+              scroll: input.scroll,
+            });
+            job.progress.done += 1;
+            await getDatabase().saveJob(job);
+          }
+        }
 
         job.runs.push(await saveRun(input, run));
         await getDatabase().saveJob(job);
@@ -109,7 +129,7 @@ export async function enqueueJob(input) {
     id: crypto.randomUUID(),
     input: storedInput,
     status: JOB_STATUS.QUEUED,
-    progress: { done: 0, total: input.urls.length * input.devices.length },
+    progress: { done: 0, total: input.urls.length * input.devices.length * (input.deep ? 2 : 1) },
     runs: [],
     error: null,
     createdAt: new Date().toISOString(),

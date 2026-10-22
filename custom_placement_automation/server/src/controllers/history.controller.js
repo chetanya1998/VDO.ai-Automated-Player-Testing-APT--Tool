@@ -16,7 +16,8 @@ export async function listRuns(req, res) {
   const q = String(req.query.q ?? '').slice(0, 200);
   const status = ['pass', 'fail', 'error'].includes(req.query.status) ? req.query.status : '';
   const type = ['vdo.ai.js', 'style.css'].includes(req.query.type) ? req.query.type : '';
-  res.json(await resultsService.listRuns({ page, pageSize, q, status, type }));
+  const mode = req.query.mode === 'deep' ? 'deep' : '';
+  res.json(await resultsService.listRuns({ page, pageSize, q, status, type, mode }));
 }
 
 export async function getRun(req, res) {

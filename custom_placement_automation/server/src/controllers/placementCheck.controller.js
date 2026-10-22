@@ -3,6 +3,7 @@ import { SUPPORTED_DEVICES } from '../services/browser.service.js';
 import * as jobQueue from '../services/jobQueue.service.js';
 import { CHECK_TYPE } from '../services/placementRunner.service.js';
 import { loadScript, storeScript } from '../services/scriptStore.service.js';
+import { deepReadiness } from '../services/deepValidation.service.js';
 import { httpError } from '../utils/httpError.js';
 
 const TAG_PATTERN = /^[\w-]+$/;
@@ -65,9 +66,11 @@ function parseCheckInput(body = {}) {
     }
   }
 
+  if (body.deep !== undefined && typeof body.deep !== 'boolean') throw httpError(400, '`deep` must be true or false');
+  const deep = body.deep === true;
   const scroll = parseScroll(body.scroll);
   const scriptName = String(body.scriptName ?? type).slice(0, 200);
-  return { type, domain, tag, devices, urls, scroll, scriptName };
+  return { type, domain, tag, devices, urls, scroll, scriptName, deep };
 }
 
 async function resolveScript(body, type) {
@@ -86,6 +89,10 @@ async function resolveScript(body, type) {
 
 export async function createPlacementCheck(req, res) {
   const input = parseCheckInput(req.body);
+  if (input.deep) {
+    const engine = await deepReadiness();
+    if (!engine.available) throw httpError(503, engine.message);
+  }
   const { script, scriptId } = await resolveScript(req.body, input.type);
   const job = await jobQueue.enqueueJob({ ...input, script, scriptId, scriptBytes: Buffer.byteLength(script) });
   res.status(202).json(job);

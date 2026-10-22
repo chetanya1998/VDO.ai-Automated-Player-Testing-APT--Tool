@@ -5,6 +5,7 @@ import config from '../config/index.js';
 import { httpError } from '../utils/httpError.js';
 import { clearScripts } from './scriptStore.service.js';
 import { getDatabase } from './database.service.js';
+import { summarizeDeepRun } from './deepValidation.service.js';
 
 const { screenshotsDir } = config.storage;
 export const SCREENSHOTS_URL_PATH = '/screenshots';
@@ -32,7 +33,7 @@ async function writeScreenshots(runId, resultId, buffers) {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false }, run) {
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
@@ -54,6 +55,7 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
     passCount: run.passCount,
     failCount: run.failCount,
     errorCount: run.errorCount,
+    ...(deep ? { deep: true, deepSummary: summarizeDeepRun(results) } : {}),
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     results,
@@ -65,16 +67,17 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
 
 const runStatus = (run) => (run.errorCount ? 'error' : run.failCount ? 'fail' : 'pass');
 
-function matchesFilters(run, { q, status, type }) {
+function matchesFilters(run, { q, status, type, mode }) {
   if (status && runStatus(run) !== status) return false;
+  if (mode === 'deep' && !run.deep) return false;
   if (type && (run.type ?? 'vdo.ai.js') !== type) return false;
   if (!q) return true;
   const haystack = [run.tag, run.domain, ...run.results.map((r) => r.url)].join(' ').toLowerCase();
   return haystack.includes(q);
 }
 
-export async function listRuns({ page, pageSize, q = '', status = '', type = '' }) {
-  const filters = { q: q.trim().toLowerCase(), status, type };
+export async function listRuns({ page, pageSize, q = '', status = '', type = '', mode = '' }) {
+  const filters = { q: q.trim().toLowerCase(), status, type, mode };
   const runs = (await readRuns())
     .filter((run) => matchesFilters(run, filters))
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
