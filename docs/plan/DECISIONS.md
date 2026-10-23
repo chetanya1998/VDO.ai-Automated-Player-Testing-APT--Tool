@@ -20,3 +20,5 @@ The supplied test document is a draft. All TC-1 through TC-23 are in scope, but 
 | D14 Backend correlation | The appendix allows five body fields and provides no unique session/auction/request identifier | Browser context supplies local run/article scope. It does not prove a join to backend events. Keep backend verification in tasks 09/10 separate; require a real shared key before confident server correlation. | Backend and player engineering |
 
 Headless Playwright remains the proposed delivery form from the original plan. Bulk URL submission is included as a separate task; a Chrome extension is a possible alternative, not a second product to build automatically. Confirm the deployment target before implementation expands beyond fixtures.
+
+The three additional product documents supplied on 20 October 2026 were reviewed against every decision in [D01-D14-SOURCE-REVIEW.md](D01-D14-SOURCE-REVIEW.md). They narrow several rules but do not contain the named approvals required to mark any decision confirmed. D09 article lifecycle and D11 viewability contain material conflicts that require explicit owner choices.

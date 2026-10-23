@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "contractId": "",
+  "status": "draft",
+  "approvedAt": "",
+  "approvedBy": [],
+  "environments": {
+    "staging": { "frontendOrigin": "", "apiOrigin": "" },
+    "production": { "frontendOrigin": "", "apiOrigin": "" }
+  },
+  "identity": { "mode": "rotating_bearer", "owner": "", "rotationDays": 0, "evidence": [] },
+  "storage": { "mode": "s3", "owner": "", "backupDestination": "", "restoreEvidence": [] },
+  "logger": { "enabled": false, "owner": "", "endpoint": null, "credentialReference": null, "sharedCorrelationKey": null, "evidence": [] },
+  "decisions": [],
+  "policies": []
+}

@@ -17,6 +17,7 @@
     "db:migrate": "tsc -p tsconfig.json && node dist/src/db/migrate.js",
     "api": "pnpm build:web && tsc -p tsconfig.json && node dist/src/api/server.js",
     "pilot:evaluate": "tsc -p tsconfig.json && node dist/src/pilot/cli.js",
+    "production:validate": "tsc -p tsconfig.json && node dist/src/production/cli.js",
     "validate:fixture-profile": "tsc -p tsconfig.json && node dist/src/cli.js validate-profile config/profiles/fixture-video-inline-v1.json"
   },
   "dependencies": {

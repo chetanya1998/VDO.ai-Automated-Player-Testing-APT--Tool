@@ -1,0 +1,12 @@
+{
+  "name": "custom-placement-automation",
+  "private": true,
+  "scripts": {
+    "postinstall": "npm --prefix server install && npm --prefix client install && npm --prefix server run browsers:install",
+    "start": "concurrently --kill-others-on-fail --names server,client --prefix-colors cyan,magenta \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "setup": "bash ./setup.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.5"
+  }
+}
