@@ -577,7 +577,7 @@ The authoritative task order and handoff are in [TASKS.md](docs/plan/TASKS.md) a
 ## Documentation map
 
 - [Non-technical product guide](docs/product-guide.md)
-- [Placement Automation README](custom_placement_automation/README.md), [setup](custom_placement_automation/SETUP.md) and [local validation plan](custom_placement_automation/LOCAL-VALIDATION-PLAN.md)
+- [Placement Automation README](custom_placement_automation/README.md), [setup](custom_placement_automation/SETUP.md), [Windows step-by-step install](custom_placement_automation/INSTALL-WINDOWS.md) and [local validation plan](custom_placement_automation/LOCAL-VALIDATION-PLAN.md)
 - [Coolify self-hosting plan](docs/coolify-self-hosting.md)
 - [Dashboard use](docs/dashboard.md)
 - [Report exports](docs/report-export.md)

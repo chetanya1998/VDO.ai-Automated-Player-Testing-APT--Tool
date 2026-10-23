@@ -88,7 +88,7 @@ npm run setup || bash setup.sh
 
 The script checks for Node.js 20+ (installing it through nvm if it's missing or too old) and installs the server and client dependencies. It also installs Chromium and, on Linux, Chromium's system libraries, then creates `server/.env` and starts the app.
 
-Open **http://localhost:5173**. Full instructions, including troubleshooting, are in [SETUP.md](SETUP.md).
+Open **http://localhost:5173**. Full instructions, including troubleshooting, are in [SETUP.md](SETUP.md). **On Windows (PowerShell)**, follow [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) step by step instead.
 
 Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and actual Chromium launch (cached for 30 seconds). The dashboard polls readiness and enables checks only when all three are ready. Placement checks and PDFs both use the bundled full Chromium executable.
 
