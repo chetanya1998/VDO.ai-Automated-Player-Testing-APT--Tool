@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium } from 'playwright';
 import config from '../config/index.js';
-import { deviceContextOptions } from './browser.service.js';
+import { browserChoice, deviceContextOptions } from './browser.service.js';
 import logger from '../utils/logger.js';
 
 // The 23 validators live in the repository's TypeScript validator. Deep tests load its compiled
@@ -51,12 +50,14 @@ function errorSummary(url, device, error) {
 export async function runDeepCheck({ url, domain, tag, device, type, script, scroll }) {
   try {
     const engine = await loadEngine();
-    const { summary } = await engine.runDeepValidation({
+    const browser = browserChoice();
+    if (!browser.executablePath) throw new Error('Google Chrome was not found. Install Chrome, set CHROME_PATH, or set BROWSER_CHANNEL=auto.');
+    const { summary, screenshots } = await engine.runDeepValidation({
       targetUrl: url,
       domain,
       tagName: tag,
       device: { id: device, kind: device === 'mobile' ? 'mobile' : 'desktop', contextOptions: deviceContextOptions(device) },
-      browserExecutablePath: chromium.executablePath(),
+      browserExecutablePath: browser.executablePath,
       code: { type, body: script },
       scroll,
       observeAfterLoadMs: config.deep.observeMs,
@@ -66,10 +67,10 @@ export async function runDeepCheck({ url, domain, tag, device, type, script, scr
       allowPrivateNetwork: config.deep.allowPrivateNetwork,
     });
     logger.info(`[DEEP ${summary.overallVerdict}] ${url} (${device}) ${JSON.stringify(summary.verdictCounts)}`);
-    return summary;
+    return { summary, screenshots: screenshots ?? [] };
   } catch (error) {
     logger.error(`Deep test failed for ${url} (${device})`, error);
-    return errorSummary(url, device, error);
+    return { summary: errorSummary(url, device, error), screenshots: [] };
   }
 }
 

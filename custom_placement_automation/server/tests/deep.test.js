@@ -23,9 +23,10 @@ test('the compiled 23-case engine loads from the repository build', { skip: (awa
 });
 
 test('a deep check that cannot run returns 23 unevaluated cases instead of failing the job', { skip: !(await deepReadiness()).available ? 'run pnpm build in the repository root first' : config.deep.allowPrivateNetwork ? 'DEEP_ALLOW_PRIVATE_NETWORK is on' : false }, async () => {
-  const summary = await runDeepCheck({ url: 'http://127.0.0.1:9/article', domain: '127.0.0.1', tag: 'v-example', device: 'desktop', type: 'vdo.ai.js', script: '/* */' });
+  const { summary, screenshots } = await runDeepCheck({ url: 'http://127.0.0.1:9/article', domain: '127.0.0.1', tag: 'v-example', device: 'desktop', type: 'vdo.ai.js', script: '/* */' });
   assert.equal(summary.executionState, 'errored');
   assert.equal(summary.verdictCounts.UNKNOWN, 23);
+  assert.deepEqual(screenshots, []);
   assert.match(summary.executionErrors[0].message, /public network address/);
 });
 

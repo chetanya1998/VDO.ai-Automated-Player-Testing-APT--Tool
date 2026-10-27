@@ -38,6 +38,13 @@ export interface DeepBrowserRunOptions {
   captureLimits?: Partial<CaptureLimits>;
   // Loopback/private targets are allowed only for local fixture tests.
   allowPrivateNetwork?: boolean;
+  // When set, take screenshots aimed at the first element matching playerSelector (in any frame).
+  screenshots?: { playerSelector: string; settleMs?: number };
+}
+
+export interface DeepScreenshot {
+  label: string;
+  jpeg: Buffer;
 }
 
 export interface DeepBrowserRunResult {
@@ -61,6 +68,8 @@ export interface DeepBrowserRunResult {
   errors: BrowserRunError[];
   scriptOverrideHits: number;
   blockedRequestCount: number;
+  screenshots: DeepScreenshot[];
+  screenshotNotes: string[];
   resourcesClosed: { context: boolean; browser: boolean };
 }
 
@@ -163,6 +172,40 @@ class PublicEgressGuard {
   }
 }
 
+// Screenshots are taken at CSS pixel size so high-density phone screens stay small; failures are notes, never errors.
+async function screenshot(page: Page, label: string, shots: DeepScreenshot[], notes: string[]): Promise<void> {
+  try {
+    const jpeg = await page.screenshot({ type: "jpeg", quality: 70, scale: "css", animations: "disabled", caret: "hide", timeout: 10_000 });
+    // A page too short to scroll gives the same picture again; keep only the first one.
+    if (!shots.at(-1)?.jpeg.equals(jpeg)) shots.push({ label, jpeg });
+  } catch (error) {
+    notes.push(`${label}: screenshot failed (${error instanceof Error ? error.message.split("\n")[0] : String(error)})`);
+  }
+}
+
+async function capturePlayerScreenshots(page: Page, options: NonNullable<DeepBrowserRunOptions["screenshots"]>, shots: DeepScreenshot[], notes: string[]): Promise<void> {
+  const settle = () => page.waitForTimeout(options.settleMs ?? 1_500);
+  await screenshot(page, "End of observation (deep test)", shots, notes);
+  let player = null;
+  for (const frame of [page.mainFrame(), ...page.frames().filter((item) => item !== page.mainFrame() && !item.isDetached())]) {
+    const candidate = frame.locator(options.playerSelector).first();
+    if (await candidate.count().catch(() => 0) > 0) { player = candidate; break; }
+  }
+  if (player === null) {
+    notes.push("The player was not found on the page, so no player screenshot was taken.");
+    return;
+  }
+  const bottom = await player.evaluate((element) => {
+    element.scrollIntoView({ block: "center", behavior: "instant" });
+    return element.getBoundingClientRect().bottom;
+  }).catch(() => null);
+  await settle();
+  await screenshot(page, "Player in view (deep test)", shots, notes);
+  await page.evaluate((value) => window.scrollBy({ top: Math.max(window.innerHeight * 0.5, (value ?? window.innerHeight) + window.innerHeight * 0.25), behavior: "instant" }), bottom).catch(() => undefined);
+  await settle();
+  await screenshot(page, "Scrolled past player (floating, deep test)", shots, notes);
+}
+
 async function scrollStep(page: Page, ratio: number): Promise<void> {
   await page.evaluate((value) => window.scrollBy({ top: Math.round(window.innerHeight * value), behavior: "instant" }), ratio);
 }
@@ -195,6 +238,8 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
     let deadline: NodeJS.Timeout | undefined;
     let scriptOverrideHits = 0;
     let blockedRequestCount = 0;
+    const screenshots: DeepScreenshot[] = [];
+    const screenshotNotes: string[] = [];
 
     try {
       browser = await dependencies.launch({
@@ -265,6 +310,7 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
           await capture.captureVisibility(activePage, "interval");
         }
         await capture.capturePage(activePage);
+        if (options.screenshots !== undefined) await capturePlayerScreenshots(activePage, options.screenshots, screenshots, screenshotNotes);
         await activePage.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
         finalUrl = activePage.url();
       })();
@@ -344,6 +390,8 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
       errors: runErrors,
       scriptOverrideHits,
       blockedRequestCount,
+      screenshots,
+      screenshotNotes,
       resourcesClosed: { context: contextClosed, browser: browserClosed },
     };
   };

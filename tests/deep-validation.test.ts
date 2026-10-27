@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { runDeepValidation, type DeepBrowserRunResult, type DeepValidationInput } from "../src/deep/index.js";
 import { DEEP_EGRESS_BOUNDARY } from "../src/deep/runner.js";
+import type { Evidence } from "../src/contracts.js";
 import { startFixtureServer } from "./fixtures/server.js";
 
 const desktop: DeepValidationInput["device"] = { id: "desktop", kind: "desktop", contextOptions: { viewport: { width: 1366, height: 768 } } };
@@ -29,6 +30,8 @@ function emptyRun(status: DeepBrowserRunResult["status"]): DeepBrowserRunResult 
     capture: { evidence: [], gaps: [], complete: true },
     errors: status === "runner_error" ? [{ stage: "launch", name: "Error", message: "browser missing" }] : [],
     scriptOverrideHits: 0,
+    screenshots: [],
+    screenshotNotes: [],
     blockedRequestCount: 0,
     resourcesClosed: { context: true, browser: true },
   };
@@ -193,4 +196,46 @@ test("live deep validation of a page whose tag moves and renames its div", { ski
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("TC-2 times every player file: 500 ms passes, up to 1000 ms warns, slower or unfinished fails", async () => {
+  const { validatePlayerFileTiming } = await import("../src/deep/cases.js");
+  const request = (id: number, path: string, durationMs: number | null, outcome = "http_success"): Evidence => ({
+    schemaVersion: 1,
+    runId: "run-1",
+    articleEpochId: "a1",
+    deviceId: "desktop",
+    evidenceId: `browser-${id}`,
+    source: "browser_network",
+    capturedAt: new Date().toISOString(),
+    data: { kind: "request", url: `https://a.vdo.ai${path}`, durationMs, outcome },
+  });
+  const check = (...evidence: Evidence[]) => validatePlayerFileTiming({
+    evidence, product: "video", deviceId: "desktop", articleEpochId: "a1", tagName: "v-site", passMaxMs: 500, warningMaxMs: 1000,
+    dependencies: [{ id: "vdo.min.js", products: ["video"], pathSuffixes: ["/vdo.min.js"] }],
+  });
+  assert.equal(check(request(1, "/core/v-site/vdo.ai.js", 120), request(2, "/core/vdo.min.js", 480)).verdict, "PASS");
+  const warning = check(request(1, "/core/v-site/vdo.ai.js", 516), request(2, "/other.js", 5000));
+  assert.equal(warning.verdict, "WARNING", "files that are not player files are ignored");
+  const failures = (result: ReturnType<typeof check>) => (result.observed as { failures: string[] }).failures;
+  assert.deepEqual(failures(warning), ["vdo.ai.js took 516 ms (over 500 ms)"]);
+  assert.equal(check(request(1, "/core/v-site/vdo.ai.js", 200), request(2, "/core/vdo.min.js", 1200)).verdict, "FAIL");
+  assert.deepEqual(failures(check(request(1, "/core/v-site/vdo.ai.js", null, "incomplete"))), ["vdo.ai.js never finished loading"]);
+  assert.equal(check().verdict, "UNKNOWN");
+});
+
+test("mobile deep tests do not require iPhone/Safari evidence", async () => {
+  const mobile: DeepValidationInput["device"] = { id: "mobile", kind: "mobile", contextOptions: { viewport: { width: 412, height: 839 }, isMobile: true, hasTouch: true } };
+  const { report } = await runDeepValidation({
+    targetUrl: "https://publisher.example/article",
+    domain: "publisher.example",
+    tagName: "v-publisher-example",
+    device: mobile,
+    browserExecutablePath: "unused",
+    runBrowser: async () => emptyRun("completed"),
+  });
+  const tc16 = report.checks.find((check) => check.testCaseId === "TC-16");
+  const observed = tc16?.observed as { coverageGaps: string[]; failures: string[]; missingExercises: string[] };
+  assert.equal((tc16?.expected as { realIosEvidence: string }).realIosEvidence, "not_applicable");
+  assert.doesNotMatch(JSON.stringify([observed.coverageGaps, observed.failures, observed.missingExercises]), /iOS|Safari|blocked_inline/i);
 });

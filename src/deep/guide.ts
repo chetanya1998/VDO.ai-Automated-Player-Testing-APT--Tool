@@ -16,10 +16,10 @@ export const CASE_GUIDE: Record<TestCaseId, CaseGuide> = {
     fail: "vdo.ai.js was missing, was for a different tag, or our server returned an error, so the player could not start. Usually a publisher installation problem.",
   },
   "TC-2": {
-    checks: "How long vdo.ai.js took to download. Target: 500 ms or less.",
-    pass: "vdo.ai.js loaded within 500 ms.",
-    warning: "vdo.ai.js took between 500 and 1000 ms: it works but slows the player down.",
-    fail: "vdo.ai.js took more than 1 second or never finished, which delays or prevents the player.",
+    checks: "How long each of the player's files took to load: vdo.ai.js and the files it needs (vdo.min.js, settings, Google IMA, video player, Prebid, real-time bidding, analytics). Every file should load within 500 ms.",
+    pass: "Every player file loaded within 500 ms.",
+    warning: "At least one player file took between 500 and 1000 ms: it works but slows the player down.",
+    fail: "At least one player file took more than 1 second or never finished loading, which delays or stops the player.",
   },
   "TC-3": {
     checks: "That our tag is installed only once: one vdo.ai.js request, one player div and one install script.",

@@ -90,6 +90,8 @@ On Windows (PowerShell): `Copy-Item server/.env.example server/.env`
 | `PORT` | `3000` | API port. If you change it, also change the proxy target in `client/vite.config.js` |
 | `HEADLESS` | `false` | `false` shows the browser window during checks. **Set to `true` on a machine without a display** (servers, containers) |
 | `NAVIGATION_TIMEOUT_MS` | `30000` | Max time to load a page |
+| `BROWSER_CHANNEL` | `auto` | `auto` uses Google Chrome when installed (plays MP4/H.264 video ads), otherwise Chromium; `chrome` or `chromium` forces one |
+| `CHROME_PATH` | — | Full path to `chrome.exe` / Chrome, only if it is installed somewhere unusual |
 | `URL_TIMEOUT_MS` | `60000` | Max time per URL, including all checks |
 | `PLACEMENT_EVENT_SETTLE_MS` | `3000` | How long to keep listening after the first `vdo:placement` event |
 | `SCREENSHOT_SETTLE_MS` | `1200` | Pause before each screenshot so the player can settle |

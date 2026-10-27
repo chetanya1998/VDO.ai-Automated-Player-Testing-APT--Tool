@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import config from '../config/index.js';
+import { launchOptions } from './browser.service.js';
 import { SCREENSHOTS_URL_PATH, getRun } from './results.service.js';
 import logger from '../utils/logger.js';
 
@@ -20,9 +21,9 @@ let pdfBrowserPromise = null;
 
 function getPdfBrowser() {
   if (!pdfBrowserPromise) {
-    logger.info('Launching headless Chromium for PDF reports');
+    logger.info('Launching headless browser for PDF reports');
     pdfBrowserPromise = chromium
-      .launch({ channel: 'chromium', headless: true, timeout: 10000 })
+      .launch({ ...launchOptions(), headless: true, timeout: 10000 })
       .then((browser) => {
         browser.on('disconnected', () => {
           pdfBrowserPromise = null;
@@ -126,7 +127,7 @@ function renderCase(c) {
   </tr>`;
 }
 
-function renderDeep(deep) {
+function renderDeep(deep, deepImages = []) {
   if (!deep) return '';
   const causes = deep.probableCauses ?? [];
   const evaluated = deep.cases?.length ?? 0;
@@ -134,6 +135,7 @@ function renderDeep(deep) {
     <div class="deep">
       <h3>Deep test · ${evaluated ? `${deep.verdictCounts?.PASS ?? 0} of ${evaluated} test cases passed` : '23 test cases not evaluated'} <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
       ${renderVerdictTiles(deep.verdictCounts, evaluated || undefined)}
+      ${deepImages.length ? `<p class="deep-h">Screenshots from the deep test (your custom code applied)</p><div class="shots">${deepImages.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
       ${
         evaluated
           ? `<table class="cases"><thead><tr><th>Test case</th><th>What it tests</th><th>What the result means</th></tr></thead><tbody>${deep.cases.map(renderCase).join('')}</tbody></table>`
@@ -145,7 +147,7 @@ function renderDeep(deep) {
     </div>`;
 }
 
-function renderResult(run, result, index, images) {
+function renderResult(run, result, index, images, deepImages) {
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
   const facts = [
@@ -187,11 +189,11 @@ function renderResult(run, result, index, images) {
             .join('')}</div>`
         : ''
     }
-    ${renderDeep(result.deep)}
+    ${renderDeep(result.deep, deepImages)}
   </section>`;
 }
 
-function renderReport(run, imagesByResult) {
+function renderReport(run, imagesByResult, deepImagesByResult) {
   const status = runStatus(run);
   const meta = [
     ['Domain', run.domain],
@@ -295,7 +297,7 @@ function renderReport(run, imagesByResult) {
     <div class="error"><b>${run.errorCount}</b>URLs with errors</div>
   </div>
   ${run.deep ? renderDeepPerUrl(run) : ''}
-  ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i])).join('')}
+  ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i], deepImagesByResult[i])).join('')}
 </body>
 </html>`;
 }
@@ -312,10 +314,20 @@ export async function renderRunPdf(runId) {
     }),
   );
 
+  const deepImagesByResult = await Promise.all(
+    run.results.map(async (result) => {
+      const labels = result.deep?.screenshotLabels ?? [];
+      const images = await Promise.all(
+        (result.deep?.screenshots ?? []).map(async (url, i) => ({ src: await readScreenshot(url), label: labels[i] ?? `Deep test screenshot ${i + 1}` })),
+      );
+      return images.filter((img) => img.src);
+    }),
+  );
+
   const browser = await getPdfBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(renderReport(run, imagesByResult), { waitUntil: 'load' });
+    await page.setContent(renderReport(run, imagesByResult, deepImagesByResult), { waitUntil: 'load' });
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,

@@ -22,9 +22,9 @@ import { validateLoggerPresence } from "../rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "../rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "../rules/viewability.js";
 import { applyActiveViewEvidence, summarizeActiveView } from "../rules/activeview.js";
-import { productForTag, validateDependencyBuild, validateEventSanity, validateTagDomain } from "./cases.js";
+import { productForTag, validateDependencyBuild, validateEventSanity, validatePlayerFileTiming, validateTagDomain } from "./cases.js";
 import { CASE_GUIDE, resultMeaning } from "./guide.js";
-import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScrollSettings } from "./runner.js";
+import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScreenshot, type DeepScrollSettings } from "./runner.js";
 
 export const CASE_TITLES: Record<TestCaseId, string> = {
   "TC-1": "Correct tag and vdo.ai.js loading",
@@ -113,6 +113,8 @@ export interface DeepValidationSummary {
 export interface DeepValidationResult {
   summary: DeepValidationSummary;
   report: DeterministicReport;
+  // JPEG images aimed at the player, taken with the custom code applied; saved by the caller.
+  screenshots: DeepScreenshot[];
 }
 
 const DEFAULT_CONFIG_DIRECTORY = fileURLToPath(new URL("../../../config/", import.meta.url));
@@ -139,7 +141,6 @@ function bounded(value: JsonValue): JsonValue {
 
 // Which repository policy each case's rule depends on, used to explain UNKNOWN verdicts.
 const CASE_POLICIES: Partial<Record<TestCaseId, { key: string; label: string }>> = {
-  "TC-2": { key: "timing", label: "speed limit" },
   "TC-5": { key: "eventRules", label: "event" },
   "TC-6": { key: "eventRules", label: "event" },
   "TC-7": { key: "eventRules", label: "event" },
@@ -174,6 +175,7 @@ const PLAIN_STATES: Record<string, string> = {
   capture_incomplete: "The page was still loading or some tracking calls never finished, so the tool could not see everything it needs.",
   frame_geometry_unobservable: "The ad plays inside a frame the tool cannot look into, so it could not measure how visible the player was.",
   visibility_samples_unavailable: "The tool could not measure the player's position on screen.",
+  no_player_file_requests_observed: "The page never requested vdo.ai.js or the player's files, so their load times could not be measured.",
   no_logger_requests_observed: "The player sent no tracking calls, so there was nothing to check.",
   dep_field_not_observed: "Tracking calls did not include the build ('dep') value.",
   no_logger_identity_observed: "Tracking calls did not include the tag or website name.",
@@ -321,10 +323,12 @@ function integrationExpectation(rawProfile: Record<string, unknown>, tagName: st
 // Real pages always end with some requests in flight (media, ad refresh, beacons). The deep test treats the
 // capture as complete when nothing structural is missing and every logger and tag-loader request finished.
 const STRUCTURAL_GAPS = new Set(["service_worker_visibility", "evidence_limit_reached", "page_capture_unavailable"]);
+// A slow or failed screenshot says nothing about the player; only missing DOM or visibility data does.
+const isScreenshotGap = (gap: { code: string; detail: string }) => gap.code === "page_capture_unavailable" && gap.detail.startsWith("Screenshot unavailable");
 
 function deepCaptureComplete(browser: DeepBrowserRunResult, tagName: string): boolean {
   if (browser.status !== "completed") return false;
-  if (browser.capture.gaps.some((gap) => STRUCTURAL_GAPS.has(gap.code))) return false;
+  if (browser.capture.gaps.some((gap) => STRUCTURAL_GAPS.has(gap.code) && !isScreenshotGap(gap))) return false;
   const byId = new Map(browser.capture.evidence.map((item) => [item.evidenceId, item]));
   const loggerNetworkIds = new Set(browser.capture.evidence.flatMap((item) => item.source === "browser_logger" && typeof item.data.networkEvidenceId === "string" ? [item.data.networkEvidenceId] : []));
   return !browser.capture.gaps.some((gap) => {
@@ -403,6 +407,7 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     ...(input.code?.type === "vdo.ai.js" ? { scriptOverride: { tagName: input.tagName, body: input.code.body, loaderOrigin: new URL(loaderUrlFor(input)).origin } } : {}),
     ...(input.code?.type === "style.css" ? { injectCss: input.code.body } : {}),
     ...(input.allowPrivateNetwork === undefined ? {} : { allowPrivateNetwork: input.allowPrivateNetwork }),
+    screenshots: { playerSelector: `#vdoai_parentWrapperDiv, .vdoai_parentWrapperDiv, #${input.tagName}, [id^="${input.tagName}-"]` },
   });
   const executionState = browser.status === "completed" ? "completed" : browser.status === "timed_out" ? "timed_out" : "errored";
   const run = parseRun({ ...queued, executionState });
@@ -442,7 +447,9 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const loggerCaseInput = { ...shared, aliases, captureComplete };
   const evaluatedChecks = [
     ...validateIntegration({ ...shared, expectation }),
-    ...validateTiming({ ...shared, policy: timing, loaderUrl: expectation.loaderUrl, captureContext: { coldCache: browser.metadata.coldCache, networkConditions: browser.metadata.networkConditions } }),
+    // TC-2 uses the agreed per-file rule below; TC-15 (logger timing) stays with the timing rule.
+    ...validateTiming({ ...shared, policy: timing, loaderUrl: expectation.loaderUrl, captureContext: { coldCache: browser.metadata.coldCache, networkConditions: browser.metadata.networkConditions } }).filter((check) => check.testCaseId !== "TC-2"),
+    validatePlayerFileTiming({ ...shared, dependencies: runtimePolicy.dependencies, product: expectation.tag.product, passMaxMs: timing.script.passMaxMs, warningMaxMs: timing.script.warningMaxMs }),
     validateLoggerPresence({ ...shared, loaderUrl: expectation.loaderUrl, captureComplete }),
     ...applyDemandContext(applyRuntimeContext(applyVisibilityContext(eventChecks.filter((check) => check.testCaseId !== "TC-7" && check.testCaseId !== "TC-22"), viewability), blocked, dependencies), demand),
     ...articleChecks,
@@ -477,6 +484,7 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     ...(input.device.kind === "mobile" ? ["Mobile is an emulated Android phone (Pixel 7) in Chromium; iPhone/Safari is not tested."] : []),
     ...(input.code?.type === "vdo.ai.js" && browser.scriptOverrideHits === 0 ? ["The page never requested the tag's vdo.ai.js, so the custom placement code did not run."] : []),
     ...(inFlightAtEnd(browser) > 0 ? [`${inFlightAtEnd(browser)} request(s) were still in flight when observation ended; they are recorded but only logger and tag-loader requests must finish.`] : []),
+    ...(browser.screenshotNotes ?? []),
     ...(browser.blockedRequestCount > 0 ? [`${browser.blockedRequestCount} request(s) to private or unresolvable addresses were blocked.`] : []),
   ];
 
@@ -521,5 +529,5 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     executionErrors: report.executionErrors.map((error) => ({ stage: error.stage, message: error.message })),
     limitations,
   };
-  return { summary, report };
+  return { summary, report, screenshots: browser.screenshots ?? [] };
 }

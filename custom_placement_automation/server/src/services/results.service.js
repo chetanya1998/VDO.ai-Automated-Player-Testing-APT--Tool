@@ -16,13 +16,13 @@ async function readRuns() {
 
 const appendRun = (run) => getDatabase().saveRun(run);
 
-async function writeScreenshots(runId, resultId, buffers) {
+async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   const runDir = path.join(screenshotsDir, runId);
   await fs.mkdir(runDir, { recursive: true });
 
   return Promise.all(
     buffers.map(async (buffer, index) => {
-      const fileName = `${resultId}_${index + 1}.jpg`;
+      const fileName = `${resultId}_${prefix}${index + 1}.jpg`;
       await fs.writeFile(path.join(runDir, fileName), buffer);
       return {
         url: `${SCREENSHOTS_URL_PATH}/${runId}/${fileName}`,
@@ -37,10 +37,17 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
-    run.results.map(async ({ screenshots, ...result }) => {
+    run.results.map(async ({ screenshots, deepScreenshots = [], ...result }) => {
       const resultId = crypto.randomUUID();
       const artifacts = await writeScreenshots(id, resultId, screenshots);
-      return { ...result, id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
+      const deepArtifacts = await writeScreenshots(id, resultId, deepScreenshots.map((shot) => shot.jpeg), 'deep_');
+      const deep = result.deep && {
+        ...result.deep,
+        screenshots: deepArtifacts.map((a) => a.url),
+        screenshotLabels: deepScreenshots.map((shot) => shot.label),
+        screenshotArtifacts: deepArtifacts,
+      };
+      return { ...result, ...(deep ? { deep } : {}), id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
     }),
   );
 

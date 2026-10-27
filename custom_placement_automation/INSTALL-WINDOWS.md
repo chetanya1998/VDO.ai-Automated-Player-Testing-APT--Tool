@@ -11,6 +11,7 @@ Run every command in **PowerShell** (not Command Prompt). `bash setup.sh` does n
 | 1 | **Git** | https://git-scm.com/download/win | Keep the defaults |
 | 2 | **Node.js LTS** (v20 or newer; v22/v24 recommended) | https://nodejs.org | Keep the defaults |
 | 3 | **PostgreSQL 18** | https://www.postgresql.org/download/windows/ | **Write down the password** for the `postgres` user and the **port** the installer offers |
+| 4 | **Google Chrome** | https://www.google.com/chrome/ | Keep the defaults. The tool uses it automatically because it plays MP4 video ads; Playwright's Chromium cannot |
 
 If other PostgreSQL versions (for example 14, 15, 17) are already installed, ports 5432–5434 are usually taken and the 18 installer suggests the next free one (often **5435**). Keep it and note it. Each version has its own password.
 
@@ -165,7 +166,7 @@ Keep this window open; **Ctrl+C** stops the app.
 
 ✅ **Check 2**: http://127.0.0.1:3000/api/ready shows `"ready":true`, `"database":true`, `"launchable":true` and `"deep":{"available":true}`.
 
-✅ **Check 3**: http://localhost:5173 shows all five status boxes green: **API, Database, Chromium, Deep test engine, Queue**.
+✅ **Check 3**: http://localhost:5173 shows all status boxes green: **API, Database, Google Chrome, MP4 video, Deep test engine, Queue**. If the browser box says **Chromium** and **MP4 video** is amber, Chrome is not installed (or not found): install it, or set `CHROME_PATH` in `server\.env`.
 
 ## Part 8: Safe first test (no vdo.ai tag involved)
 
@@ -174,7 +175,7 @@ Keep this window open; **Ctrl+C** stops the app.
 3. **Run settings**: Desktop only
 4. **Test depth**: deep **off** → **Run check**
 
-✅ **Check**: a Chromium window opens and closes, the result is **FAIL · Wrapper div not found** (expected, example.com has no vdo.ai player), the run appears in **Recent runs**, and **PDF** downloads a report.
+✅ **Check**: a Chrome (or Chromium) window opens and closes, the result is **FAIL · Wrapper div not found** (expected, example.com has no vdo.ai player), the run appears in **Recent runs**, and **PDF** downloads a report.
 
 Then press **Re-run**, turn the **deep test on** and run again.
 
@@ -207,7 +208,8 @@ What to expect:
 | Database box red / `password authentication failed` | Use the **PostgreSQL 18** password in `server\.env` |
 | `connection refused` / `ECONNREFUSED` | Wrong port in `server\.env`, or the 18 service is stopped (Part 5.1) |
 | `database "player_validator" does not exist` | Redo Part 5.3 on the same port as in `server\.env` |
-| Chromium box red | `cd C:\vdo\custom_placement_automation\server` then `npx playwright install chromium` |
+| Browser box red (Chromium) | `cd C:\vdo\custom_placement_automation\server` then `npx playwright install chromium` |
+| MP4 video box amber | Install Google Chrome (Part 1), or set `CHROME_PATH` in `server\.env` to `chrome.exe`, then restart `npm start` |
 | Deep test engine box amber | Redo Part 4 |
 | `Port 3000 is already in use` | Close the other program or old `npm start` window |
 | `Another placement server already owns this database schema` | Another `npm start` is still running; close it |

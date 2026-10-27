@@ -61,11 +61,13 @@ Every result also includes:
 
 ### Deep test (all 23 cases)
 
-Turn on **Automated player testing — deep** in step 4 of the form. The placement check runs exactly as before; afterwards each URL is opened again in a separate Chromium, with the same device, tag and your `vdo.ai.js` or `style.css` applied, and validated against TC-1 to TC-23.
+Turn on **Automated player testing — deep** in step 4 of the form. The placement check runs exactly as before; afterwards each URL is opened again in a separate browser, with the same device, tag and your `vdo.ai.js` or `style.css` applied, and validated against TC-1 to TC-23.
 
 - **Engine:** the repository's validator rules (`src/rules`, `src/deep` in the repository root), compiled once with `pnpm install && pnpm build` in the repository root. `npm run setup` does this for you. `/api/ready` reports `deep.available`; the toggle is disabled until the engine is built.
 - **Results per URL:** separate Pass / Fail / Warning / Unknown / N/A totals, filter chips and 23 case tiles grouped as *Tag & installation*, *Logger & events*, *Ads & viewability* and *Devices & navigation*. Click a tile to read, in plain words, what the test checks, what its result means and why it got that result on this page; technical detail for engineers is folded underneath. Likely causes and limitations are listed below.
 - **Run totals:** pass/fail/warning/unknown counts across every URL × 23 cases, also shown in History (Depth column, *Deep tests* filter) and in the PDF.
+- **Screenshots:** the deep test takes its own screenshots with your code applied: at the end of the observation, with the player centred in view, and scrolled past the player (to show floating). They are shown under the deep results and in the PDF. Identical pictures (a page too short to scroll) are kept once; a screenshot that fails is listed under limitations and does not affect the verdicts.
+- **TC-2 (load time):** every request for a player file (vdo.ai.js and the files TC-12 checks) is timed. All within 500 ms is a Pass, the slowest between 500 and 1000 ms is a Warning, and over 1000 ms or never finishing is a Fail. The detail names the slow files.
 - **Verdicts are honest:** PASS needs captured evidence and a confirmed policy. The repository policies are still drafts, so rules that require a confirmed policy report **UNKNOWN** with the reason, never a guessed PASS. TC-23 needs an approved infinite-scroll/SPA navigation for the site and reports UNKNOWN until one exists. Mobile is an emulated Android phone (Pixel 7); iPhone/Safari is not tested.
 - **Network:** deep tests allow public internet traffic but refuse private-network addresses. Set `DEEP_ALLOW_PRIVATE_NETWORK=true` in `server/.env` to test internal staging servers.
 - **Time:** about 15 s of observation per URL and device (`DEEP_OBSERVE_MS`), capped at `DEEP_URL_TIMEOUT_MS` (default 90 s).
@@ -90,7 +92,7 @@ The script checks for Node.js 20+ (installing it through nvm if it's missing or 
 
 Open **http://localhost:5173**. Full instructions, including troubleshooting, are in [SETUP.md](SETUP.md). **On Windows (PowerShell)**, follow [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) step by step instead.
 
-Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and actual Chromium launch (cached for 30 seconds). The dashboard polls readiness and enables checks only when all three are ready. Placement checks and PDFs both use the bundled full Chromium executable.
+Before starting, configure `DATABASE_URL` for your local PostgreSQL instance in `server/.env`. Setup does not install PostgreSQL or create credentials. The API listens only on `127.0.0.1`. `/api/ready` checks the database, queue state and actual Chromium launch (cached for 30 seconds). The dashboard polls readiness and enables checks only when all three are ready. Placement checks, deep tests and PDFs use the same browser: **Google Chrome when it is installed** (`BROWSER_CHANNEL=auto`), otherwise Playwright's Chromium. Install Chrome: Playwright's Chromium cannot play MP4/H.264 video, which most video ads use, so ad playback cases (TC-10) are less reliable without it. The dashboard shows which browser is in use and whether it plays MP4 video.
 
 If Chromium is missing, run `node server/node_modules/playwright/cli.js install chromium` from this folder in a normal terminal. The running dashboard detects the installation automatically. A production-built dashboard is also served directly by the backend at `http://127.0.0.1:3000/` when `client/dist` exists; Vite development mode remains on port 5173.
 

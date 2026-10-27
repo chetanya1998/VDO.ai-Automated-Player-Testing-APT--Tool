@@ -76,7 +76,7 @@ async function processJob(job) {
         if (input.deep) {
           for (const result of run.results) {
             if (stopping) throw new Error('Execution interrupted by server shutdown');
-            result.deep = await runDeepCheck({
+            const deep = await runDeepCheck({
               url: result.url,
               domain: input.domain,
               tag: input.tag,
@@ -85,6 +85,9 @@ async function processJob(job) {
               script,
               scroll: input.scroll,
             });
+            result.deep = deep.summary;
+            // Saved as files with the run, like the placement screenshots.
+            result.deepScreenshots = deep.screenshots;
             job.progress.done += 1;
             await getDatabase().saveJob(job);
           }

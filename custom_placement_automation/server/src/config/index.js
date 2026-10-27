@@ -38,6 +38,9 @@ const config = {
   browser: {
     headless: process.env.HEADLESS === 'true',
     navigationTimeoutMs: Number(process.env.NAVIGATION_TIMEOUT_MS) || 30000,
+    // auto: Google Chrome when installed (it plays MP4/H.264 video), otherwise Playwright's Chromium.
+    channel: ['auto', 'chrome', 'chromium'].includes(process.env.BROWSER_CHANNEL) ? process.env.BROWSER_CHANNEL : 'auto',
+    chromePath: process.env.CHROME_PATH || '',
   },
 
   placement: {

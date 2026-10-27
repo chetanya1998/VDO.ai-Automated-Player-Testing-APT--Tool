@@ -1619,3 +1619,5 @@ a.btn {
 /* Grid children may shrink so wide tables scroll inside their own box on small screens. */
 .run > *,
 .summary-section { min-width: 0; }
+
+.deep-shots h5 { margin: 0 0 6px; font-size: 12.5px; }

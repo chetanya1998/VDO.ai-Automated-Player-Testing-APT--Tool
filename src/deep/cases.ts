@@ -126,3 +126,53 @@ export function validateEventSanity(input: LoggerCaseInput): CheckResult {
     problems: problems.slice(0, 50),
   }, problems.length > 0 ? [...new Set(problems.map((item) => item.evidenceId))] : records.map((item) => item.evidenceId));
 }
+
+export interface PlayerFileTimingInput {
+  evidence: readonly Evidence[];
+  dependencies: ReadonlyArray<{ id: string; products: string[]; pathSuffixes: string[]; pathPatterns?: string[] }>;
+  product: string;
+  deviceId: string;
+  articleEpochId: string;
+  tagName: string;
+  passMaxMs: number;
+  warningMaxMs: number;
+}
+
+// TC-2 as agreed for deep tests: every request for the player's own files (vdo.ai.js and the files TC-12 checks)
+// must finish within passMaxMs; up to warningMaxMs is a warning; slower, or never finishing, fails. The slowest file decides.
+export function validatePlayerFileTiming(input: PlayerFileTimingInput): CheckResult {
+  const loaderPath = `/core/${input.tagName}/vdo.ai.js`;
+  const dependencies = input.dependencies.filter((item) => item.products.includes(input.product) && item.id !== "vdo.ai.js")
+    .map((item) => ({ id: item.id, suffixes: item.pathSuffixes, patterns: (item.pathPatterns ?? []).map((pattern) => new RegExp(pattern, "i")) }));
+  const rank: Record<Verdict, number> = { PASS: 0, NOT_APPLICABLE: 0, UNKNOWN: 1, WARNING: 2, FAIL: 3 };
+  const files = input.evidence.flatMap((item) => {
+    if (item.source !== "browser_network" || item.data.kind !== "request" || typeof item.data.url !== "string") return [];
+    let url: URL;
+    try { url = new URL(item.data.url); } catch { return []; }
+    const id = url.pathname.endsWith(loaderPath) ? "vdo.ai.js"
+      : dependencies.find((dependency) => dependency.suffixes.some((suffix) => url.pathname.endsWith(suffix)) || dependency.patterns.some((pattern) => pattern.test(url.pathname)))?.id;
+    if (id === undefined) return [];
+    const outcome = typeof item.data.outcome === "string" ? item.data.outcome : "incomplete";
+    const durationMs = typeof item.data.durationMs === "number" ? item.data.durationMs : null;
+    const finished = outcome === "http_success" || outcome === "http_failure";
+    const band: Verdict = !finished || durationMs === null || durationMs > input.warningMaxMs ? "FAIL" : durationMs > input.passMaxMs ? "WARNING" : "PASS";
+    return [{ evidenceId: item.evidenceId, file: id, url: `${url.origin}${url.pathname}`, durationMs, outcome, band }];
+  }).sort((left, right) => rank[right.band] - rank[left.band] || (right.durationMs ?? Infinity) - (left.durationMs ?? Infinity));
+  const verdict: Verdict = files.length === 0 ? "UNKNOWN" : files.reduce<Verdict>((worst, item) => rank[item.band] > rank[worst] ? item.band : worst, "PASS");
+  const failures = files.filter((item) => item.band !== "PASS").map((item) => item.durationMs === null || !["http_success", "http_failure"].includes(item.outcome)
+    ? `${item.file} never finished loading`
+    : `${item.file} took ${item.durationMs} ms (${item.band === "FAIL" ? `over ${input.warningMaxMs}` : `over ${input.passMaxMs}`} ms)`);
+  return {
+    testCaseId: "TC-2",
+    verdict,
+    category: verdict === "PASS" ? "NONE" : verdict === "UNKNOWN" ? "TOOLING" : "RUNTIME_BROWSER",
+    scope: { deviceId: input.deviceId, articleEpochId: input.articleEpochId, tagName: input.tagName },
+    expected: { files: "vdo.ai.js and the player files TC-12 checks", passMaxMs: input.passMaxMs, warningMaxMs: input.warningMaxMs },
+    observed: {
+      ...(files.length === 0 ? { state: "no_player_file_requests_observed" } : {}),
+      files,
+      failures,
+    },
+    evidenceIds: files.map((item) => item.evidenceId),
+  };
+}

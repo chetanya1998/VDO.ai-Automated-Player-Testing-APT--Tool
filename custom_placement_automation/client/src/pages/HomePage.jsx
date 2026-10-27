@@ -47,13 +47,15 @@ export default function HomePage() {
     : apiUp === false
       ? { tone: 'down', label: 'API unreachable' }
       : readiness?.ready
-        ? { tone: 'ok', label: 'Chromium connected' }
+        ? { tone: 'ok', label: `${readiness.browser?.name ?? 'Browser'} connected` }
         : { tone: 'down', label: apiUp ? 'Setup required' : 'Connecting…' };
 
   const systemItems = [
     { label: 'API', ok: apiUp === true, detail: apiUp === false ? 'Unreachable' : apiUp ? 'Connected' : 'Connecting…' },
     { label: 'Database', ok: Boolean(readiness?.database), detail: readiness ? (readiness.database ? 'PostgreSQL ready' : 'Unavailable') : '—' },
-    { label: 'Chromium', ok: Boolean(readiness?.browser?.launchable), detail: readiness?.browser?.launchable ? `Version ${readiness.browser.version ?? 'ready'}` : readiness ? 'Not launchable' : '—' },
+    { label: readiness?.browser?.name ?? 'Browser', ok: Boolean(readiness?.browser?.launchable), detail: readiness?.browser?.launchable ? `Version ${readiness.browser.version ?? 'ready'}` : readiness ? 'Not launchable' : '—' },
+    // Without MP4/H.264 most video ads cannot play, so ad delivery results are less reliable.
+    { label: 'MP4 video', ok: readiness?.browser?.mp4 === true, detail: readiness?.browser?.mp4 == null ? '—' : readiness.browser.mp4 ? 'Plays MP4/H.264 ads' : 'Cannot play MP4 ads: install Google Chrome', optional: true },
     { label: 'Deep test engine', ok: Boolean(readiness?.deep?.available), detail: readiness?.deep ? (readiness.deep.available ? '23 cases ready' : 'Not built') : '—', optional: true },
     { label: 'Queue', ok: Boolean(readiness && !readiness.queue?.stopping), detail: readiness?.queue ? `${readiness.queue.active} running · ${readiness.queue.queued} queued` : '—' },
   ];

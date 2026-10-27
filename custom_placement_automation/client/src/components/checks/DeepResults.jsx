@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Badge } from '../ui';
 import VerdictCounts from './VerdictCounts.jsx';
 import VerdictTiles from './VerdictTiles.jsx';
+import ScreenshotGallery from './ScreenshotGallery.jsx';
 import { CASE_GROUPS, VERDICTS, caseNumber, verdictLabel, verdictTone } from '../../utils/verdicts.js';
 import { formatDuration } from '../../utils/format.js';
 
@@ -84,6 +85,13 @@ export default function DeepResults({ deep }) {
         {Number.isFinite(deep.durationMs) && <span>{formatDuration(deep.durationMs)}</span>}
         {Number.isFinite(deep.evidenceRecords) && <span>{deep.evidenceRecords} evidence records</span>}
       </div>
+
+      {deep.screenshots?.length > 0 && (
+        <div className="deep-shots">
+          <h5>Screenshots from the deep test (your custom code applied)</h5>
+          <ScreenshotGallery screenshots={deep.screenshots} labels={deep.screenshotLabels} />
+        </div>
+      )}
 
       {deep.executionErrors?.length > 0 && (
         <div className="alert alert-error">{deep.executionErrors.map((error) => error.message).join(' · ')}</div>
