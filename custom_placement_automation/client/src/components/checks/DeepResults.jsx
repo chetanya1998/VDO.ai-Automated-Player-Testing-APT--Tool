@@ -1,28 +1,48 @@
 import { useState } from 'react';
 import { Badge } from '../ui';
 import VerdictCounts from './VerdictCounts.jsx';
+import VerdictTiles from './VerdictTiles.jsx';
 import { CASE_GROUPS, VERDICTS, caseNumber, verdictLabel, verdictTone } from '../../utils/verdicts.js';
 import { formatDuration } from '../../utils/format.js';
 
 const FILTERS = [{ value: 'ALL', label: 'All' }, ...VERDICTS.map((verdict) => ({ value: verdict, label: verdictLabel(verdict) }))];
 
-function CaseDetail({ item }) {
+const GENERIC_REASON = 'Observed behaviour matched the rule.';
+
+function CaseDetail({ item, onClose }) {
+  const showReason = item.summary && item.summary !== GENERIC_REASON && item.summary !== item.meaning;
   return (
-    <div className="case-detail">
+    <div className={`case-detail tone-${verdictTone(item.verdict)}`} role="region" aria-label={`${item.testCaseId} explanation`}>
       <div className="case-detail-head">
         <span className="case-id">{item.testCaseId}</span>
         <strong>{item.title}</strong>
         <Badge tone={verdictTone(item.verdict)}>{verdictLabel(item.verdict)}</Badge>
+        <button type="button" className="case-detail-close" onClick={onClose} aria-label="Close explanation">×</button>
       </div>
-      <p className="case-why">{item.summary}</p>
-      <dl className="facts">
-        <dt>Category</dt>
-        <dd>{item.category.replaceAll('_', ' ').toLowerCase()}</dd>
-        <dt>Evidence records</dt>
-        <dd>{item.evidenceCount}</dd>
-      </dl>
+      {item.checks && (
+        <div className="case-plain">
+          <h6>What this test checks</h6>
+          <p>{item.checks}</p>
+        </div>
+      )}
+      <div className="case-plain case-plain-result">
+        <h6>Result: {verdictLabel(item.verdict)}</h6>
+        <p>{item.meaning ?? item.summary}</p>
+      </div>
+      {showReason && (
+        <div className="case-plain">
+          <h6>{item.verdict === 'PASS' ? 'What the tool saw' : 'Why, on this page'}</h6>
+          <p>{item.summary}</p>
+        </div>
+      )}
       <details className="event-detail">
-        <summary>Expected vs observed</summary>
+        <summary>Technical detail (for engineers)</summary>
+        <dl className="facts">
+          <dt>Category</dt>
+          <dd>{item.category.replaceAll('_', ' ').toLowerCase()}</dd>
+          <dt>Evidence records</dt>
+          <dd>{item.evidenceCount}</dd>
+        </dl>
         <pre>{JSON.stringify({ expected: item.expected, observed: item.observed }, null, 2)}</pre>
       </details>
     </div>
@@ -52,7 +72,8 @@ export default function DeepResults({ deep }) {
         <Badge tone={verdictTone(deep.overallVerdict)}>Overall {verdictLabel(deep.overallVerdict)}</Badge>
       </header>
 
-      <VerdictCounts counts={counts} />
+      <VerdictTiles counts={counts} total={evaluated || undefined} />
+      <VerdictCounts counts={counts} compact />
 
       <div className="deep-meta muted">
         {deep.policyStatus === 'draft' && <span className="chip chip-warn">Draft policies</span>}
@@ -106,7 +127,7 @@ export default function DeepResults({ deep }) {
                           className={`case-tile tone-${verdictTone(item.verdict)}${openId === item.testCaseId ? ' open' : ''}`}
                           aria-expanded={openId === item.testCaseId}
                           onClick={() => setOpenId(openId === item.testCaseId ? null : item.testCaseId)}
-                          title={item.summary}
+                          title={item.checks || item.summary}
                         >
                           <span className="case-tile-top">
                             <span className="case-id">{item.testCaseId}</span>
@@ -116,12 +137,15 @@ export default function DeepResults({ deep }) {
                         </button>
                       ))}
                   </div>
+                  {open && items.some((item) => item.testCaseId === open.testCaseId) && (
+                    <CaseDetail item={open} onClose={() => setOpenId(null)} />
+                  )}
                 </div>
               );
             })}
           </div>
 
-          {open && <CaseDetail item={open} />}
+          {!open && <p className="muted small case-hint">Click any test case to see, in plain words, what it checks and what its result means.</p>}
         </>
       )}
 

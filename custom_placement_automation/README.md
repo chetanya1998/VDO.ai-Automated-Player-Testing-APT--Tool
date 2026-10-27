@@ -64,7 +64,7 @@ Every result also includes:
 Turn on **Automated player testing — deep** in step 4 of the form. The placement check runs exactly as before; afterwards each URL is opened again in a separate Chromium, with the same device, tag and your `vdo.ai.js` or `style.css` applied, and validated against TC-1 to TC-23.
 
 - **Engine:** the repository's validator rules (`src/rules`, `src/deep` in the repository root), compiled once with `pnpm install && pnpm build` in the repository root. `npm run setup` does this for you. `/api/ready` reports `deep.available`; the toggle is disabled until the engine is built.
-- **Results per URL:** a verdict bar, filter chips and 23 case tiles grouped as *Tag & installation*, *Logger & events*, *Ads & viewability* and *Devices & navigation*. Click a tile for the reason, expected vs observed values and evidence count. Likely causes and limitations are listed below.
+- **Results per URL:** separate Pass / Fail / Warning / Unknown / N/A totals, filter chips and 23 case tiles grouped as *Tag & installation*, *Logger & events*, *Ads & viewability* and *Devices & navigation*. Click a tile to read, in plain words, what the test checks, what its result means and why it got that result on this page; technical detail for engineers is folded underneath. Likely causes and limitations are listed below.
 - **Run totals:** pass/fail/warning/unknown counts across every URL × 23 cases, also shown in History (Depth column, *Deep tests* filter) and in the PDF.
 - **Verdicts are honest:** PASS needs captured evidence and a confirmed policy. The repository policies are still drafts, so rules that require a confirmed policy report **UNKNOWN** with the reason, never a guessed PASS. TC-23 needs an approved infinite-scroll/SPA navigation for the site and reports UNKNOWN until one exists. Mobile is Chromium emulation and cannot certify real iOS/Safari.
 - **Network:** deep tests allow public internet traffic but refuse private-network addresses. Set `DEEP_ALLOW_PRIVATE_NETWORK=true` in `server/.env` to test internal staging servers.
@@ -74,7 +74,7 @@ Turn on **Automated player testing — deep** in step 4 of the form. The placeme
 
 - Every run is saved locally and listed in **History**.
 - **Re-run:** fills the form with that run's settings and stored script so you can change something and run it again.
-- **PDF:** downloads a report for the run, with all results and screenshots, plus the 23-case table for deep runs.
+- **PDF:** downloads a report for the run, with all results and screenshots. Deep runs add separate result totals, a legend of what each result means, and for every test case what it tested and what its result means in plain words.
 - **Re-run** keeps the deep test setting.
 - **Delete / Clear all:** removes runs and their screenshots.
 

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import app from '../src/app.js';
 import config from '../src/config/index.js';
-import { deepReadiness, runDeepCheck, summarizeDeepRun } from '../src/services/deepValidation.service.js';
+import { addPlainLanguage, deepReadiness, runDeepCheck, summarizeDeepRun } from '../src/services/deepValidation.service.js';
 
 test('deep option must be a boolean and readiness reports the deep engine separately', async () => {
   const server = app.listen(0, '127.0.0.1');
@@ -33,4 +33,13 @@ test('run totals add up per-URL deep verdicts', () => {
   const counts = (pass, fail) => ({ PASS: pass, FAIL: fail, WARNING: 0, UNKNOWN: 23 - pass - fail, NOT_APPLICABLE: 0 });
   const totals = summarizeDeepRun([{ deep: { verdictCounts: counts(20, 1) } }, { deep: { verdictCounts: counts(10, 3) } }, {}]);
   assert.deepEqual(totals, { urls: 2, cases: 46, verdictCounts: { PASS: 30, FAIL: 4, WARNING: 0, UNKNOWN: 12, NOT_APPLICABLE: 0 } });
+});
+
+test('runs saved before plain-language explanations get them when opened', { skip: (await deepReadiness()).available ? false : 'run pnpm build in the repository root first' }, async () => {
+  const run = { results: [{ deep: { cases: [{ testCaseId: 'TC-3', verdict: 'FAIL', summary: 'x' }, { testCaseId: 'TC-10', verdict: 'UNKNOWN', summary: 'y' }] } }] };
+  await addPlainLanguage(run);
+  const [tc3, tc10] = run.results[0].deep.cases;
+  assert.match(tc3.checks, /installed only once/);
+  assert.match(tc3.meaning, /more than once/);
+  assert.match(tc10.meaning, /could not decide/);
 });

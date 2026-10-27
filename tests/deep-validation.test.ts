@@ -48,6 +48,8 @@ test("deep validation reports all 23 cases with titles, draft-policy limits and 
   assert.equal(report.checks.length, 23);
   assert.deepEqual(summary.cases.map((item) => item.testCaseId), Array.from({ length: 23 }, (_, index) => `TC-${index + 1}`));
   assert.ok(summary.cases.every((item) => item.title.length > 0 && item.summary.length > 0));
+  assert.ok(summary.cases.every((item) => item.checks.length > 20 && item.meaning.length > 10), "every case explains what it checks and what its result means");
+  assert.match(summary.cases.find((item) => item.testCaseId === "TC-5")?.summary ?? "", /'loaded' event never fired/);
   assert.equal(summary.policyStatus, "draft");
   assert.equal(summary.scriptOverrideHits, 0);
   assert.ok(summary.limitations.some((item) => item.includes("custom placement code did not run")));

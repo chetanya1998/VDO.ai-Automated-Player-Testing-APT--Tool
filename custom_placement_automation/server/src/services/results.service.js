@@ -5,7 +5,7 @@ import config from '../config/index.js';
 import { httpError } from '../utils/httpError.js';
 import { clearScripts } from './scriptStore.service.js';
 import { getDatabase } from './database.service.js';
-import { summarizeDeepRun } from './deepValidation.service.js';
+import { addPlainLanguage, summarizeDeepRun } from './deepValidation.service.js';
 
 const { screenshotsDir } = config.storage;
 export const SCREENSHOTS_URL_PATH = '/screenshots';
@@ -94,7 +94,7 @@ export async function listRuns({ page, pageSize, q = '', status = '', type = '',
 export async function getRun(runId) {
   const run = (await readRuns()).find((r) => r.id === runId);
   if (!run) throw httpError(404, 'Run not found');
-  return run;
+  return addPlainLanguage(run);
 }
 
 export async function deleteRun(runId) {

@@ -79,31 +79,57 @@ const VERDICT_CLASS = { PASS: 'pass', FAIL: 'fail', WARNING: 'warn', UNKNOWN: 'u
 const VERDICT_LABEL = { PASS: 'Pass', FAIL: 'Fail', WARNING: 'Warning', UNKNOWN: 'Unknown', NOT_APPLICABLE: 'N/A' };
 const VERDICT_ORDER = ['PASS', 'FAIL', 'WARNING', 'UNKNOWN', 'NOT_APPLICABLE'];
 
-function renderVerdictCounts(counts) {
-  return `<div class="deep-counts">${VERDICT_ORDER.map(
-    (verdict) => `<span class="v ${VERDICT_CLASS[verdict]}"><b>${counts?.[verdict] ?? 0}</b> ${VERDICT_LABEL[verdict]}</span>`,
-  ).join('')}</div>`;
+const VERDICT_HELP = {
+  PASS: 'the player did what it should',
+  FAIL: 'something is broken and needs fixing',
+  WARNING: 'it works, but something needs attention',
+  UNKNOWN: 'the tool could not decide, usually because the rules are not signed off yet or the page gave too little data',
+  NOT_APPLICABLE: 'the check does not apply to this page or device',
+};
+const GENERIC_REASON = 'Observed behaviour matched the rule.';
+
+// One box per result type, so the totals read separately.
+function renderVerdictTiles(counts, total) {
+  const sum = total ?? VERDICT_ORDER.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
+  return `<div class="tiles">${VERDICT_ORDER.map((verdict) => {
+    const value = counts?.[verdict] ?? 0;
+    return `<div class="tile ${VERDICT_CLASS[verdict]}${value === 0 ? ' zero' : ''}"><b>${value}</b><span>${VERDICT_LABEL[verdict]}</span><small>${sum ? Math.round((value / sum) * 100) : 0}%</small></div>`;
+  }).join('')}</div>`;
+}
+
+const renderLegend = () =>
+  `<p class="legend">${VERDICT_ORDER.map((verdict) => `<b class="${VERDICT_CLASS[verdict]}">${VERDICT_LABEL[verdict]}</b>: ${VERDICT_HELP[verdict]}`).join(' · ')}</p>`;
+
+function renderCase(c) {
+  const reason = c.summary && c.summary !== GENERIC_REASON && c.summary !== c.meaning ? c.summary : '';
+  return `<tr class="${VERDICT_CLASS[c.verdict] ?? 'unknown'}">
+    <td class="case-id">${escapeHtml(c.testCaseId)}<span class="badge ${VERDICT_CLASS[c.verdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td>
+    <td><b>${escapeHtml(c.title)}</b>${c.checks ? `<div class="plain"><i>What it tests:</i> ${escapeHtml(c.checks)}</div>` : ''}</td>
+    <td>${
+      // The legend already explains Unknown, so state the page's reason directly instead of repeating it.
+      c.verdict === 'UNKNOWN' && reason
+        ? `Could not decide: ${escapeHtml(reason)}`
+        : `${escapeHtml(c.meaning ?? c.summary)}${reason ? `<div class="plain"><i>On this page:</i> ${escapeHtml(reason)}</div>` : ''}`
+    }</td>
+  </tr>`;
 }
 
 function renderDeep(deep) {
   if (!deep) return '';
   const causes = deep.probableCauses ?? [];
+  const evaluated = deep.cases?.length ?? 0;
   return `
     <div class="deep">
-      <h3>Deep test · 23 cases <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
-      ${renderVerdictCounts(deep.verdictCounts)}
+      <h3>Deep test · ${evaluated ? `${deep.verdictCounts?.PASS ?? 0} of ${evaluated} test cases passed` : '23 test cases not evaluated'} <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
+      ${renderVerdictTiles(deep.verdictCounts, evaluated || undefined)}
       ${
-        deep.cases?.length
-          ? `<table class="cases"><thead><tr><th>Case</th><th>Check</th><th>Result</th><th>Why</th></tr></thead><tbody>${deep.cases
-              .map(
-                (c) => `<tr><td>${escapeHtml(c.testCaseId)}</td><td>${escapeHtml(c.title)}</td><td><span class="badge ${VERDICT_CLASS[c.verdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td><td>${escapeHtml(c.summary)}</td></tr>`,
-              )
-              .join('')}</tbody></table>`
+        evaluated
+          ? `<table class="cases"><thead><tr><th>Test case</th><th>What it tests</th><th>What the result means</th></tr></thead><tbody>${deep.cases.map(renderCase).join('')}</tbody></table>`
           : ''
       }
-      ${causes.length ? `<p class="deep-h">Likely causes${causes[0].rules === 'draft' ? ' (draft RCA rules)' : ''}</p><ul class="hints">${causes.map((c) => `<li>${escapeHtml(c.testCaseId)}: ${escapeHtml(c.summary)} · owner: ${escapeHtml(c.owner)}</li>`).join('')}</ul>` : ''}
+      ${causes.length ? `<p class="deep-h">Likely causes${causes[0].rules === 'draft' ? ' (draft rules)' : ''}</p><ul class="hints">${causes.map((c) => `<li>${escapeHtml(c.testCaseId)}: ${escapeHtml(c.summary)} · owner: ${escapeHtml(c.owner)}</li>`).join('')}</ul>` : ''}
       ${deep.executionErrors?.length ? `<p class="deep-h">Errors</p><ul class="hints">${deep.executionErrors.map((e) => `<li>${escapeHtml(e.message)}</li>`).join('')}</ul>` : ''}
-      ${deep.limitations?.length ? `<p class="deep-h">Limitations</p><ul class="notes">${deep.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
+      ${deep.limitations?.length ? `<p class="deep-h">What this run could not confirm</p><ul class="notes">${deep.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
     </div>`;
 }
 
@@ -211,6 +237,25 @@ function renderReport(run, imagesByResult) {
   .deep-counts .v { padding: 2px 8px; border-radius: 999px; background: #f4f6f8; font-size: 9.5px; }
   .deep-counts .v.pass b { color: #1a7f37; } .deep-counts .v.fail b { color: #c62828; } .deep-counts .v.warn b { color: #9a6700; }
   table.cases { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
+  .tile { border: 1px solid #dde1e6; border-top: 3px solid #98a2b3; border-radius: 6px; padding: 5px 8px; break-inside: avoid; }
+  .tile b { display: block; font-size: 17px; line-height: 1.2; }
+  .tile span { display: block; font-weight: 600; font-size: 10px; }
+  .tile small { color: #5c6570; font-size: 9px; }
+  .tile.pass { border-top-color: #1a7f37; } .tile.pass b { color: #1a7f37; }
+  .tile.fail { border-top-color: #c62828; } .tile.fail b { color: #c62828; }
+  .tile.warn { border-top-color: #9a6700; } .tile.warn b { color: #9a6700; }
+  .tile.unknown { border-top-color: #667085; } .tile.unknown b { color: #475467; }
+  .tile.na { border-top-color: #c0c6ce; }
+  .tile.zero { opacity: 0.55; }
+  .legend { margin: 0 0 14px; color: #5c6570; font-size: 9.5px; }
+  .legend b.pass { color: #1a7f37; } .legend b.fail { color: #c62828; } .legend b.warn { color: #9a6700; }
+  table.cases td.case-id { width: 62px; }
+  table.cases td.case-id .badge { display: inline-block; margin-top: 3px; }
+  table.cases .plain { color: #5c6570; margin-top: 2px; }
+  table.cases tr.fail td:first-child { border-left: 3px solid #c62828; }
+  table.cases tr.warn td:first-child { border-left: 3px solid #9a6700; }
+  table.cases tr.pass td:first-child { border-left: 3px solid #1a7f37; }
   table.cases th, table.cases td { text-align: left; vertical-align: top; padding: 3px 5px; border-bottom: 1px solid #eef0f3; }
   table.cases th { color: #5c6570; font-weight: 600; }
   table.cases tr { break-inside: avoid; }
@@ -228,7 +273,7 @@ function renderReport(run, imagesByResult) {
     <div class="fail"><b>${run.failCount}</b>Fail</div>
     <div class="error"><b>${run.errorCount}</b>Error</div>
   </div>
-  ${run.deep && run.deepSummary ? `<h2 class="section-title">Deep test totals · ${run.deepSummary.urls} URL(s) × 23 cases</h2>${renderVerdictCounts(run.deepSummary.verdictCounts)}` : ''}
+  ${run.deep && run.deepSummary ? `<h2 class="section-title">Deep test totals · ${run.deepSummary.urls} URL(s) × 23 test cases</h2>${renderVerdictTiles(run.deepSummary.verdictCounts, run.deepSummary.cases)}${renderLegend()}` : ''}
   ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i])).join('')}
 </body>
 </html>`;

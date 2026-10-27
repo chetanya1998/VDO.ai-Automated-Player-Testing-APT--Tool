@@ -73,6 +73,20 @@ export async function runDeepCheck({ url, domain, tag, device, type, script, scr
   }
 }
 
+// Runs saved before plain-language explanations existed get them from the engine when they are opened.
+export async function addPlainLanguage(run) {
+  if (!run?.results?.some((result) => result.deep?.cases?.some((item) => !item.checks || !item.meaning))) return run;
+  let engine;
+  try { engine = await loadEngine(); } catch { return run; }
+  for (const result of run.results) {
+    for (const item of result.deep?.cases ?? []) {
+      item.checks ??= engine.CASE_GUIDE[item.testCaseId]?.checks ?? '';
+      item.meaning ??= engine.resultMeaning(item.testCaseId, item.verdict);
+    }
+  }
+  return run;
+}
+
 // Run-level totals so history rows can show deep results without loading every case.
 export function summarizeDeepRun(results) {
   const totals = { PASS: 0, FAIL: 0, WARNING: 0, UNKNOWN: 0, NOT_APPLICABLE: 0 };

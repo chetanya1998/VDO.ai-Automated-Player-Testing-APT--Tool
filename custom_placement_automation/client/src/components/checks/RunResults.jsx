@@ -1,6 +1,7 @@
 import { Badge } from '../ui';
 import ResultCard from './ResultCard.jsx';
 import VerdictCounts from './VerdictCounts.jsx';
+import VerdictTiles from './VerdictTiles.jsx';
 import { checkTypeLabel } from '../../utils/checkTypes.js';
 import { formatDateTime, formatDuration, formatScroll, runStatus } from '../../utils/format.js';
 
@@ -39,7 +40,8 @@ export default function RunResults({ run }) {
             <span className="block-eyebrow">
               Deep test · {run.deepSummary.urls} URL{run.deepSummary.urls === 1 ? '' : 's'} × 23 cases
             </span>
-            <VerdictCounts counts={run.deepSummary.verdictCounts} />
+            <VerdictTiles counts={run.deepSummary.verdictCounts} total={run.deepSummary.cases} />
+            <VerdictCounts counts={run.deepSummary.verdictCounts} compact />
           </div>
         )}
       </div>

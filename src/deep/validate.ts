@@ -23,6 +23,7 @@ import { parseTimingPolicy, validateTiming } from "../rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "../rules/viewability.js";
 import { applyActiveViewEvidence, summarizeActiveView } from "../rules/activeview.js";
 import { productForTag, validateDependencyBuild, validateEventSanity, validateTagDomain } from "./cases.js";
+import { CASE_GUIDE, resultMeaning } from "./guide.js";
 import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScrollSettings } from "./runner.js";
 
 export const CASE_TITLES: Record<TestCaseId, string> = {
@@ -75,6 +76,9 @@ export interface DeepValidationInput {
 export interface DeepCaseSummary {
   testCaseId: TestCaseId;
   title: string;
+  // Plain language: what the case checks, and what this verdict means for it.
+  checks: string;
+  meaning: string;
   verdict: Verdict;
   category: string;
   summary: string;
@@ -135,23 +139,26 @@ function bounded(value: JsonValue): JsonValue {
 
 // Which repository policy each case's rule depends on, used to explain UNKNOWN verdicts.
 const CASE_POLICIES: Partial<Record<TestCaseId, { key: string; label: string }>> = {
-  "TC-2": { key: "timing", label: "timing" },
-  "TC-5": { key: "eventRules", label: "event rules" },
-  "TC-6": { key: "eventRules", label: "event rules" },
-  "TC-7": { key: "eventRules", label: "event rules" },
-  "TC-8": { key: "visibilityPolicy", label: "visibility" },
-  "TC-9": { key: "demandPolicy", label: "demand" },
-  "TC-10": { key: "demandPolicy", label: "demand and auction" },
-  "TC-11": { key: "runtimePolicy", label: "runtime (blocked events)" },
-  "TC-12": { key: "runtimePolicy", label: "runtime (dependencies)" },
-  "TC-15": { key: "timing", label: "timing" },
+  "TC-2": { key: "timing", label: "speed limit" },
+  "TC-5": { key: "eventRules", label: "event" },
+  "TC-6": { key: "eventRules", label: "event" },
+  "TC-7": { key: "eventRules", label: "event" },
+  "TC-8": { key: "visibilityPolicy", label: "viewability" },
+  "TC-9": { key: "demandPolicy", label: "ad request" },
+  "TC-10": { key: "demandPolicy", label: "ad delivery" },
+  "TC-11": { key: "runtimePolicy", label: "blocked-event" },
+  "TC-12": { key: "runtimePolicy", label: "required-file" },
+  "TC-15": { key: "timing", label: "speed limit" },
   "TC-16": { key: "devicePolicy", label: "device" },
-  "TC-22": { key: "eventRules", label: "event rules" },
+  "TC-22": { key: "eventRules", label: "event" },
   "TC-23": { key: "articlePolicy", label: "article navigation" },
 };
 
 function describe(item: unknown): string {
-  if (typeof item === "string") return item;
+  if (typeof item === "string") {
+    const missing = /^(.+): missing ([\w ]+)$/.exec(item);
+    return missing === null ? item : `${missing[1]}: the '${missing[2]}' event never fired`;
+  }
   if (typeof item === "object" && item !== null && !Array.isArray(item)) {
     const record = item as Record<string, unknown>;
     for (const key of ["detail", "reason", "message", "cause"]) if (typeof record[key] === "string") return record[key] as string;
@@ -159,7 +166,33 @@ function describe(item: unknown): string {
   return JSON.stringify(item);
 }
 
-const readable = (value: string) => value.replaceAll("_", " ");
+// Plain wording for the technical states rules report.
+const PLAIN_STATES: Record<string, string> = {
+  visibility_policy_unconfirmed: "The page data was captured, but the viewability rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  demand_policy_unconfirmed: "The page data was captured, but the ad delivery rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  auction_policy_unconfirmed: "The page data was captured, but the ad auction rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  capture_incomplete: "The page was still loading or some tracking calls never finished, so the tool could not see everything it needs.",
+  frame_geometry_unobservable: "The ad plays inside a frame the tool cannot look into, so it could not measure how visible the player was.",
+  visibility_samples_unavailable: "The tool could not measure the player's position on screen.",
+  no_logger_requests_observed: "The player sent no tracking calls, so there was nothing to check.",
+  dep_field_not_observed: "Tracking calls did not include the build ('dep') value.",
+  no_logger_identity_observed: "Tracking calls did not include the tag or website name.",
+  execution_error: "The test browser hit an error on this page, so this check could not run.",
+  no_captured_evidence_for_finding: "The rule spotted a possible problem but no page data backs it up, so it is not reported as a failure.",
+  tag_prefix_not_approved: "The tag does not start with an approved product prefix (v, c, s or b).",
+  dom_unavailable: "The tool could not read the page structure.",
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  requestCount: "vdo.ai.js requests",
+  externalScriptCount: "vdo.ai.js script tags",
+  bootstrapScriptCount: "inline install snippets",
+  anchorCount: "player divs",
+  status: "server status",
+  resourceType: "file type",
+};
+
+const readable = (value: string) => PLAIN_STATES[value] ?? value.replaceAll("_", " ");
 
 // A short, plain-language reason taken from the rule's own observation.
 export function caseSummary(check: CheckResult, draftPolicies: readonly string[] = []): string {
@@ -178,21 +211,18 @@ export function caseSummary(check: CheckResult, draftPolicies: readonly string[]
     const differences = Object.entries(expected).flatMap(([key, value]) => {
       const actual = record[key];
       const primitive = (item: unknown) => item === null || ["string", "number", "boolean"].includes(typeof item);
-      return primitive(value) && primitive(actual) && actual !== value ? [`${readable(key)}: expected ${String(value)}, observed ${String(actual)}`] : [];
+      return primitive(value) && primitive(actual) && actual !== value ? [`${FIELD_LABELS[key] ?? readable(key)}: expected ${String(value)}, found ${String(actual)}`] : [];
     });
     if (differences.length > 0) return differences.slice(0, 3).join("; ");
   }
   if (check.verdict === "FAIL" || check.verdict === "WARNING") return "Did not match the expected behaviour; see the observed detail.";
   if (check.verdict === "UNKNOWN") {
-    if (check.testCaseId === "TC-23") return "Needs an approved infinite-scroll/SPA navigation for this site; only one article was visited.";
+    if (check.testCaseId === "TC-23") return "This site has no saved steps for moving to the next article (infinite scroll or single-page navigation), so only one article was visited. QA needs to add those steps for the site.";
     const policy = CASE_POLICIES[check.testCaseId];
-    if (policy !== undefined && draftPolicies.includes(policy.key)) return `Evidence captured, but the ${policy.label} policy is still a draft; this rule only passes against a confirmed policy.`;
-    return "Required evidence was not captured.";
+    if (policy !== undefined && draftPolicies.includes(policy.key)) return `The page data was captured, but the ${policy.label} rules have not been signed off yet, so the tool will not call this a pass or a fail.`;
+    return "The page did not provide the information this check needs.";
   }
-  if (check.verdict === "PASS") {
-    if (typeof record.state === "string") return readable(record.state);
-    return "Observed behaviour matched the rule.";
-  }
+  if (check.verdict === "PASS") return "Observed behaviour matched the rule.";
   return "Not applicable to this page or product.";
 }
 
@@ -467,6 +497,8 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     cases: report.checks.map((check) => ({
       testCaseId: check.testCaseId,
       title: CASE_TITLES[check.testCaseId] ?? check.testCaseId,
+      checks: CASE_GUIDE[check.testCaseId]?.checks ?? "",
+      meaning: resultMeaning(check.testCaseId, check.verdict),
       verdict: check.verdict,
       category: check.category,
       summary: caseSummary(check, draftPolicies).slice(0, 500),
