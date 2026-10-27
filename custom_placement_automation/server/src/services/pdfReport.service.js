@@ -100,6 +100,18 @@ function renderVerdictTiles(counts, total) {
 const renderLegend = () =>
   `<p class="legend">${VERDICT_ORDER.map((verdict) => `<b class="${VERDICT_CLASS[verdict]}">${VERDICT_LABEL[verdict]}</b>: ${VERDICT_HELP[verdict]}`).join(' · ')}</p>`;
 
+// Deep test results per URL: 23 test cases each, never added across URLs or to the placement counts.
+function renderDeepPerUrl(run) {
+  const rows = run.results.filter((result) => result.deep);
+  if (rows.length === 0) return '';
+  return `<h2 class="section-title">Deep test · 23 test cases per URL</h2>
+  <p class="section-note">Counted separately for each URL. Details for every test case follow under each URL.</p>
+  <table class="cases per-url"><thead><tr><th>URL</th><th>Overall</th>${VERDICT_ORDER.map((verdict) => `<th class="num ${VERDICT_CLASS[verdict]}">${VERDICT_LABEL[verdict]}</th>`).join('')}</tr></thead><tbody>${rows
+    .map((result, i) => `<tr><td class="url-cell">#${i + 1} ${escapeHtml(result.url)}</td><td><span class="badge ${VERDICT_CLASS[result.deep.overallVerdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[result.deep.overallVerdict] ?? result.deep.overallVerdict)}</span></td>${VERDICT_ORDER.map((verdict) => `<td class="num ${VERDICT_CLASS[verdict]}"><b>${result.deep.verdictCounts?.[verdict] ?? 0}</b>/23</td>`).join('')}</tr>`)
+    .join('')}</tbody></table>
+  ${renderLegend()}`;
+}
+
 function renderCase(c) {
   const reason = c.summary && c.summary !== GENERIC_REASON && c.summary !== c.meaning ? c.summary : '';
   return `<tr class="${VERDICT_CLASS[c.verdict] ?? 'unknown'}">
@@ -148,10 +160,11 @@ function renderResult(run, result, index, images) {
   return `
   <section class="result ${result.status}${result.deep ? ' has-deep' : ''}">
     <header>
-      <span class="badge ${result.status}">${result.status.toUpperCase()}</span>
+      <span class="badge ${result.status}">Placement: ${result.status.toUpperCase()}</span>
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
+    ${result.deep ? '<p class="part-h">Custom placement check</p>' : ''}
     ${
       result.reasons.length
         ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>`
@@ -204,7 +217,13 @@ function renderReport(run, imagesByResult) {
   .meta { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 3px 14px; margin: 0 0 14px; padding: 10px 12px; background: #f4f6f8; border-radius: 6px; }
   .meta dt { color: #5c6570; }
   .meta dd { margin: 0; overflow-wrap: anywhere; }
-  .section-title { font-size: 13px; margin: 0 0 6px; }
+  .section-title { font-size: 13px; margin: 0 0 2px; }
+  .part-h { margin: 2px 0 4px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5c6570; }
+  .section-note { margin: 0 0 6px; color: #5c6570; font-size: 9.5px; }
+  table.per-url { margin-bottom: 6px; }
+  table.per-url th.num, table.per-url td.num { text-align: right; white-space: nowrap; }
+  table.per-url td.num.pass b { color: #1a7f37; } table.per-url td.num.fail b { color: #c62828; } table.per-url td.num.warn b { color: #9a6700; }
+  table.per-url .url-cell { overflow-wrap: anywhere; }
   .summary { display: flex; gap: 10px; margin-bottom: 16px; }
   .summary div { flex: 1; padding: 8px 10px; border: 1px solid #dde1e6; border-radius: 6px; }
   .summary b { display: block; font-size: 16px; }
@@ -264,16 +283,18 @@ function renderReport(run, imagesByResult) {
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${status.toUpperCase()}</span></h1>
+  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">Placement check: ${status.toUpperCase()}</span></h1>
   <div class="sub">Placement report · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
   <dl class="meta">${meta.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+  <h2 class="section-title">Custom placement check</h2>
+  <p class="section-note">Counts URLs. A URL passes when your placement code puts a visible player on the page.</p>
   <div class="summary">
-    <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs</div>
-    <div class="pass"><b>${run.passCount}</b>Pass</div>
-    <div class="fail"><b>${run.failCount}</b>Fail</div>
-    <div class="error"><b>${run.errorCount}</b>Error</div>
+    <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs checked</div>
+    <div class="pass"><b>${run.passCount}</b>URLs passed</div>
+    <div class="fail"><b>${run.failCount}</b>URLs failed</div>
+    <div class="error"><b>${run.errorCount}</b>URLs with errors</div>
   </div>
-  ${run.deep && run.deepSummary ? `<h2 class="section-title">Deep test totals · ${run.deepSummary.urls} URL(s) × 23 test cases</h2>${renderVerdictTiles(run.deepSummary.verdictCounts, run.deepSummary.cases)}${renderLegend()}` : ''}
+  ${run.deep ? renderDeepPerUrl(run) : ''}
   ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i])).join('')}
 </body>
 </html>`;

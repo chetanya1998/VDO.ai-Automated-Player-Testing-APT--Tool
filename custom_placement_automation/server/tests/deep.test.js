@@ -31,8 +31,9 @@ test('a deep check that cannot run returns 23 unevaluated cases instead of faili
 
 test('run totals add up per-URL deep verdicts', () => {
   const counts = (pass, fail) => ({ PASS: pass, FAIL: fail, WARNING: 0, UNKNOWN: 23 - pass - fail, NOT_APPLICABLE: 0 });
-  const totals = summarizeDeepRun([{ deep: { verdictCounts: counts(20, 1) } }, { deep: { verdictCounts: counts(10, 3) } }, {}]);
-  assert.deepEqual(totals, { urls: 2, cases: 46, verdictCounts: { PASS: 30, FAIL: 4, WARNING: 0, UNKNOWN: 12, NOT_APPLICABLE: 0 } });
+  const totals = summarizeDeepRun([{ url: 'a', deep: { overallVerdict: 'FAIL', verdictCounts: counts(20, 1) } }, { url: 'b', deep: { overallVerdict: 'FAIL', verdictCounts: counts(10, 3) } }, { url: 'c' }]);
+  assert.deepEqual({ urls: totals.urls, cases: totals.cases, verdictCounts: totals.verdictCounts }, { urls: 2, cases: 46, verdictCounts: { PASS: 30, FAIL: 4, WARNING: 0, UNKNOWN: 12, NOT_APPLICABLE: 0 } });
+  assert.deepEqual(totals.perUrl.map((item) => [item.url, item.verdictCounts.PASS]), [['a', 20], ['b', 10]], 'deep counts stay per URL');
 });
 
 test('runs saved before plain-language explanations get them when opened', { skip: (await deepReadiness()).available ? false : 'run pnpm build in the repository root first' }, async () => {

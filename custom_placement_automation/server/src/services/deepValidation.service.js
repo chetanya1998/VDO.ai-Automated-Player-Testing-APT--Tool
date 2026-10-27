@@ -87,6 +87,10 @@ export async function addPlainLanguage(run) {
   return run;
 }
 
+// Deep results per URL, kept apart from the placement check's per-URL pass/fail.
+export const deepPerUrl = (results) =>
+  results.filter((result) => result.deep).map((result) => ({ url: result.url, overallVerdict: result.deep.overallVerdict, verdictCounts: result.deep.verdictCounts }));
+
 // Run-level totals so history rows can show deep results without loading every case.
 export function summarizeDeepRun(results) {
   const totals = { PASS: 0, FAIL: 0, WARNING: 0, UNKNOWN: 0, NOT_APPLICABLE: 0 };
@@ -96,5 +100,5 @@ export function summarizeDeepRun(results) {
     urls += 1;
     for (const [verdict, count] of Object.entries(result.deep.verdictCounts ?? {})) totals[verdict] = (totals[verdict] ?? 0) + count;
   }
-  return { urls, cases: urls * 23, verdictCounts: totals };
+  return { urls, cases: urls * 23, verdictCounts: totals, perUrl: deepPerUrl(results) };
 }

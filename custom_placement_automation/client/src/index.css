@@ -1594,3 +1594,28 @@ a.btn {
 @media (max-width: 640px) {
   .verdict-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ---------- Placement and deep test summaries kept apart ---------- */
+
+.summary-section {
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.summary-section-deep { border-color: rgb(110 155 255 / 0.3); }
+.summary-section-head { margin-bottom: 10px; }
+.summary-section-head h4 { margin: 0 0 2px; font-size: 14px; }
+.summary-section-head p { margin: 0; color: var(--muted); font-size: 12px; }
+
+.deep-url-table td, .deep-url-table th { white-space: nowrap; }
+.deep-url-table th.num, .deep-url-table td.num { text-align: right; color: var(--tone, var(--text)); }
+.deep-url-table td.num small { color: var(--muted); }
+.deep-url-table td.num.zero b { color: var(--muted); font-weight: 400; }
+.deep-url-cell { max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Grid children may shrink so wide tables scroll inside their own box on small screens. */
+.run > *,
+.summary-section { min-width: 0; }

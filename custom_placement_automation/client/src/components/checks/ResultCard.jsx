@@ -22,8 +22,8 @@ export default function ResultCard({ result, index, type }) {
   return (
     <article className={`result result-${status}`}>
       <header className="result-header">
-        <Badge tone={status}>{status.toUpperCase()}</Badge>
-        {result.deep && <Badge tone={`deep-${result.deep.overallVerdict === 'PASS' ? 'pass' : result.deep.overallVerdict === 'FAIL' ? 'fail' : 'mixed'}`}>Deep · {result.deep.verdictCounts?.PASS ?? 0}/23 pass</Badge>}
+        <Badge tone={status}>Placement: {status.toUpperCase()}</Badge>
+        {result.deep && <Badge tone={`deep-${result.deep.overallVerdict === 'PASS' ? 'pass' : result.deep.overallVerdict === 'FAIL' ? 'fail' : 'mixed'}`}>Deep test: {result.deep.verdictCounts?.PASS ?? 0} of 23 passed</Badge>}
         <span className="muted">#{index + 1}</span>
         <a className="result-url" href={result.url} target="_blank" rel="noreferrer">
           {result.url}
@@ -32,7 +32,7 @@ export default function ResultCard({ result, index, type }) {
 
       <div className="result-body">
         <div>
-          <span className="block-eyebrow">Placement check</span>
+          <span className="block-eyebrow">Custom placement check</span>
           {result.reasons.length > 0 && (
             <div className="reasons">
               {result.reasons.map((reason) => (

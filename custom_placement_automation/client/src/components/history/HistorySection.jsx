@@ -12,9 +12,9 @@ const STATUS_LABELS = { pass: 'Passed', fail: 'Failed', error: 'Error' };
 
 const FILTERS = [
   { value: '', label: 'All runs' },
-  { value: 'status:pass', label: 'Passed' },
-  { value: 'status:fail', label: 'Failed' },
-  { value: 'status:error', label: 'Errors' },
+  { value: 'status:pass', label: 'Placement passed' },
+  { value: 'status:fail', label: 'Placement failed' },
+  { value: 'status:error', label: 'Placement errors' },
   { value: `type:${CHECK_TYPE.JS}`, label: 'Custom placement' },
   { value: `type:${CHECK_TYPE.CSS}`, label: 'CSS checks' },
   { value: 'mode:deep', label: 'Deep tests' },
@@ -23,7 +23,7 @@ const FILTERS = [
 const BASE_COLUMNS = [
   {
     key: 'status',
-    header: 'Status',
+    header: 'Placement check',
     render: (run) => {
       const status = runStatus(run);
       return <span className={`status-dot status-${status}`}>{STATUS_LABELS[status]}</span>;
@@ -46,20 +46,25 @@ const BASE_COLUMNS = [
   },
   {
     key: 'mode',
-    header: 'Depth',
-    render: (run) =>
-      run.deep ? (
+    header: 'Deep test (23 cases per URL)',
+    render: (run) => {
+      if (!run.deep) return <span className="muted">Not run</span>;
+      const perUrl = run.deepSummary?.perUrl ?? [];
+      if (perUrl.length === 0) return <span className="depth-tag">Deep</span>;
+      // One entry per URL, never summed across URLs.
+      const shown = perUrl.slice(0, 3);
+      return (
         <span className="depth-cell">
-          <span className="depth-tag">Deep</span>
-          {run.deepSummary && (
-            <small>
-              {run.deepSummary.verdictCounts.PASS}/{run.deepSummary.cases} pass · {run.deepSummary.verdictCounts.FAIL} fail
+          {shown.map((item, i) => (
+            <small key={`${item.url}-${i}`}>
+              {perUrl.length > 1 ? `URL ${i + 1}: ` : ''}
+              {item.verdictCounts?.PASS ?? 0}/23 passed · {item.verdictCounts?.FAIL ?? 0} failed
             </small>
-          )}
+          ))}
+          {perUrl.length > shown.length && <small>+{perUrl.length - shown.length} more URLs</small>}
         </span>
-      ) : (
-        <span className="muted">Standard</span>
-      ),
+      );
+    },
   },
   { key: 'device', header: 'Devices', render: (run) => run.device[0].toUpperCase() + run.device.slice(1) },
   { key: 'startedAt', header: 'Started', render: (run) => <time title={formatDateTime(run.startedAt)}>{formatStarted(run.startedAt)}</time> },

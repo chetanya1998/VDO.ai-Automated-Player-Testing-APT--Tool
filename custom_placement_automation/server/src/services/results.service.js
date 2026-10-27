@@ -5,7 +5,7 @@ import config from '../config/index.js';
 import { httpError } from '../utils/httpError.js';
 import { clearScripts } from './scriptStore.service.js';
 import { getDatabase } from './database.service.js';
-import { addPlainLanguage, summarizeDeepRun } from './deepValidation.service.js';
+import { addPlainLanguage, deepPerUrl, summarizeDeepRun } from './deepValidation.service.js';
 
 const { screenshotsDir } = config.storage;
 export const SCREENSHOTS_URL_PATH = '/screenshots';
@@ -84,7 +84,10 @@ export async function listRuns({ page, pageSize, q = '', status = '', type = '',
   const from = (page - 1) * pageSize;
 
   return {
-    runs: runs.slice(from, from + pageSize).map(({ results, ...run }) => run),
+    // Runs saved before per-URL deep counts existed get them from their results.
+    runs: runs.slice(from, from + pageSize).map(({ results, ...run }) => (run.deep && run.deepSummary && !run.deepSummary.perUrl
+      ? { ...run, deepSummary: { ...run.deepSummary, perUrl: deepPerUrl(results) } }
+      : run)),
     total: runs.length,
     page,
     pageSize,
