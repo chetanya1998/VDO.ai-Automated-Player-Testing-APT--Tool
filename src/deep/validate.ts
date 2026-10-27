@@ -240,6 +240,9 @@ function devicePolicyFor(raw: Record<string, unknown>, input: DeepValidationInpu
       emulated: input.device.kind === "mobile",
       // The fixture tap selector is not a publisher selector; no tap is configured for real pages.
       tap: { state: "disabled", selector: null, settleMs: 0, playbackRequired: false },
+      // iPhone/Safari is out of scope for deep tests: no real-iOS evidence and no iOS-only BlockedInline exercise.
+      realIosEvidence: "not_applicable",
+      requiredBlockEvents: (Array.isArray(template.requiredBlockEvents) ? template.requiredBlockEvents : []).filter((event) => event !== "blocked_inline"),
     }),
   };
 }
@@ -471,7 +474,7 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const limitations = [
     ...(draftPolicies.length > 0 ? [`Draft policies (${draftPolicies.join(", ")}) are used; rules that require confirmed policy report UNKNOWN instead of PASS.`] : []),
     "No approved click/scroll article navigation exists for this page, so TC-23 cannot reach three distinct articles.",
-    ...(input.device.kind === "mobile" ? ["Mobile is Chromium emulation and cannot certify real iOS/Safari behaviour."] : []),
+    ...(input.device.kind === "mobile" ? ["Mobile is an emulated Android phone (Pixel 7) in Chromium; iPhone/Safari is not tested."] : []),
     ...(input.code?.type === "vdo.ai.js" && browser.scriptOverrideHits === 0 ? ["The page never requested the tag's vdo.ai.js, so the custom placement code did not run."] : []),
     ...(inFlightAtEnd(browser) > 0 ? [`${inFlightAtEnd(browser)} request(s) were still in flight when observation ended; they are recorded but only logger and tag-loader requests must finish.`] : []),
     ...(browser.blockedRequestCount > 0 ? [`${browser.blockedRequestCount} request(s) to private or unresolvable addresses were blocked.`] : []),

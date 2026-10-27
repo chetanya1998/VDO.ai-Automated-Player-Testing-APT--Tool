@@ -89,7 +89,7 @@ export const CASE_GUIDE: Record<TestCaseId, CaseGuide> = {
     fail: "Tracking calls were repeatedly or very slow.",
   },
   "TC-16": {
-    checks: "That the player works on the device being tested (desktop or mobile), including mobile-specific blocks and player size.",
+    checks: "That the player works on the device being tested (desktop, or an Android phone for mobile) and has the right size there. iPhone is not tested.",
     pass: "The player works correctly on this device.",
     fail: "Something on this device did not work, for example the wrong screen size or playback not starting after a tap.",
   },
