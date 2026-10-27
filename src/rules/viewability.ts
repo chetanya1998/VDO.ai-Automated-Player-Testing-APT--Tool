@@ -152,7 +152,8 @@ function tc8Result(input: ViewabilityValidationInput, policy: VisibilityPolicy, 
   if (beginEvents.length === 1) {
     const event = beginEvents[0]!;
     const sample = sampleForEvent(samples, event, policy.maximumSampleGapMs);
-    const expected = sample?.viewportState === "below_viewport" ? "began_btf" : sample?.viewportState === "in_view" ? "began_atf" : null;
+    // Tech Doc: Began ATF covers a player in the viewport or above it; Began BTF only a player below it.
+    const expected = sample?.viewportState === "below_viewport" ? "began_btf" : sample?.viewportState === "in_view" || sample?.viewportState === "above_viewport" ? "began_atf" : null;
     if (expected === null) failures.push("viewport state at began event was not measurable");
     else if (loggerEvent(event) !== expected) failures.push(`reported ${loggerEvent(event)} while measured viewport state required ${expected}`);
   }

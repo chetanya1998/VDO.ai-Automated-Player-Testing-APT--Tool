@@ -107,11 +107,15 @@ export function validateDevice(input: { evidence: readonly Evidence[]; policy: D
   const completedTap = scoped.find((item) => item.source === "browser_dom" && item.data.kind === "device_tap" && item.data.outcome === "completed");
   const playbackAfterTap = completedTap === undefined ? null : events.find(({ item, event }) => event === "video_start" && item.capturedAt >= completedTap.capturedAt)?.item ?? null;
   const samples = scoped.filter((item) => item.source === "browser_dom" && item.data.kind === "visibility_sample");
-  const matchingViewport = samples.find((item) => {
+  const matchesViewport = (item: Evidence) => {
     const viewport = item.data.viewport;
     return typeof viewport === "object" && viewport !== null && !Array.isArray(viewport) && viewport.width === input.device.viewport.width && viewport.height === input.device.viewport.height;
-  });
-  const dimensionsMeasured = matchingViewport !== undefined && Array.isArray(matchingViewport.data.players) && matchingViewport.data.players.some((player) => {
+  };
+  // Normalized evidence holds one player per sample (data.player); raw samples keep the data.players list.
+  const samplePlayers = (item: Evidence): JsonValue[] => Array.isArray(item.data.players) && item.data.players.length > 0
+    ? item.data.players
+    : item.data.player === undefined || item.data.player === null ? [] : [item.data.player];
+  const dimensionsMeasured = samples.filter(matchesViewport).flatMap(samplePlayers).some((player) => {
     if (typeof player !== "object" || player === null || Array.isArray(player) || typeof player.rect !== "object" || player.rect === null || Array.isArray(player.rect)) return false;
     return typeof player.rect.width === "number" && player.rect.width > 0 && typeof player.rect.height === "number" && player.rect.height > 0;
   });
@@ -132,7 +136,7 @@ export function validateDevice(input: { evidence: readonly Evidence[]; policy: D
   if (!input.captureComplete) coverageGaps.push("browser capture was incomplete");
   if (failures.length > 0 && scoped.length === 0) coverageGaps.push("failure metadata has no captured evidence record");
   const verdict: Verdict = failures.length > 0 && scoped.length > 0 ? "FAIL" : coverageGaps.length > 0 || input.policy.status !== "confirmed" ? "UNKNOWN" : "PASS";
-  const evidenceIds = [matchingViewport?.evidenceId, completedTap?.evidenceId, playbackAfterTap?.evidenceId, hardware?.evidenceId, ...events.filter(({ event }) => event !== null && observedBlocks.includes(event)).map(({ item }) => item.evidenceId)].filter((value): value is string => value !== undefined);
+  const evidenceIds = [samples.find(matchesViewport)?.evidenceId, completedTap?.evidenceId, playbackAfterTap?.evidenceId, hardware?.evidenceId, ...events.filter(({ event }) => event !== null && observedBlocks.includes(event)).map(({ item }) => item.evidenceId)].filter((value): value is string => value !== undefined);
   if (verdict === "FAIL" && evidenceIds.length === 0) evidenceIds.push(...scoped.map((item) => item.evidenceId));
   return {
     testCaseId: "TC-16", verdict, category: verdict === "PASS" ? "NONE" : verdict === "FAIL" ? "RUNTIME_BROWSER" : "TOOLING",

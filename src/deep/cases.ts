@@ -55,6 +55,15 @@ export function validateTagDomain(input: LoggerCaseInput & { targetUrl: string; 
     detail: `${input.tagName} does not start with an approved v/c/s/b product prefix.`,
   }, records.map((item) => item.evidenceId));
   const host = new URL(input.targetUrl).hostname.toLowerCase();
+  // The tag under test and its -v<number> siblings form one family (Tech Doc: "-v{Number of Tag}").
+  const baseTag = input.tagName.replace(/-v[1-9]\d*$/, "");
+  const inFamily = (name: string) => name === baseTag || (name.startsWith(`${baseTag}-v`) && /^[1-9]\d*$/.test(name.slice(baseTag.length + 2)));
+  const allPairs = [...new Map(records.flatMap(({ payload }) => payload.fields.tagName === null ? [] : [{ tagName: payload.fields.tagName, domainName: payload.fields.domainName }])
+    .map((pair) => [`${pair.tagName}\u0000${pair.domainName ?? ""}`, pair] as const)).values()];
+  // When only other tags fired, judge those: a page logging another site's tag is a TC-18 failure.
+  const familyPairs = allPairs.filter((pair) => inFamily(pair.tagName));
+  const pairs = familyPairs.length > 0 ? familyPairs : allPairs;
+  const otherTags = [...new Set(allPairs.filter((pair) => !inFamily(pair.tagName)).map((pair) => pair.tagName))];
   const catalog: SiteProfileCatalog = {
     schemaVersion: 1,
     status: "synthetic_draft",
@@ -64,10 +73,10 @@ export function validateTagDomain(input: LoggerCaseInput & { targetUrl: string; 
       approvedHosts: [...new Set([host, input.domain, `www.${input.domain}`])],
       rootDomain: input.domain,
       acceptedDomainNames: [...new Set([input.domain, `www.${input.domain}`, host])],
-      allowMultipleTags: false,
+      allowMultipleTags: true,
       tags: [{
-        baseTag: input.tagName,
-        allowedTagNames: [input.tagName],
+        baseTag,
+        allowedTagNames: [...new Set([baseTag, input.tagName, ...familyPairs.map((pair) => pair.tagName)])],
         product,
         placement: "unconfirmed",
         floatingMode: "unconfirmed",
@@ -75,10 +84,6 @@ export function validateTagDomain(input: LoggerCaseInput & { targetUrl: string; 
       }],
     }],
   };
-  const pairs = [...new Map(records.map(({ payload }) => {
-    const key = `${payload.fields.tagName ?? ""}\u0000${payload.fields.domainName ?? ""}`;
-    return [key, { tagName: payload.fields.tagName, domainName: payload.fields.domainName }];
-  })).values()];
   const result = validateTagSet({ siteUrl: input.targetUrl, observations: pairs }, catalog);
   const verdict: Verdict = result.verdict === "PASS" && !input.captureComplete ? "UNKNOWN" : result.verdict;
   return check(input, "TC-18", verdict, {
@@ -89,6 +94,7 @@ export function validateTagDomain(input: LoggerCaseInput & { targetUrl: string; 
   }, {
     ...(pairs.length === 0 ? { state: "no_logger_identity_observed" } : {}),
     observations: pairs,
+    ...(otherTags.length > 0 ? { otherTagsOnPage: otherTags } : {}),
     identities: result.identities.map((item) => ({ verdict: item.verdict, reason: item.reason, detail: item.detail })),
     detail: result.detail,
   }, records.map((item) => item.evidenceId));

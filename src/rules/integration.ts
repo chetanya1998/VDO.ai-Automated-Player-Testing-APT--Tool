@@ -118,8 +118,15 @@ function validateLoader(input: IntegrationValidationInput, loaders: LoaderObserv
   }, expected.length > 0 ? expected.map((loader) => loader.evidenceId) : [...loaders.map((loader) => loader.evidenceId), ...(dom === null ? [] : [dom.evidenceId])]);
 }
 
+// vdo.ai.js renames the publisher's anchor from <tag> to <tag>-<n> once the player forms.
+export function isTagAnchorId(id: string | null, tagName: string): boolean {
+  if (id === null) return false;
+  if (id === tagName) return true;
+  return id.startsWith(`${tagName}-`) && /^\d+$/.test(id.slice(tagName.length + 1));
+}
+
 function domCounts(input: IntegrationValidationInput, dom: Evidence) {
-  const anchors = records(dom.data.anchors).filter((anchor) => text(anchor.id) === input.expectation.tagName);
+  const anchors = records(dom.data.anchors).filter((anchor) => isTagAnchorId(text(anchor.id), input.expectation.tagName));
   const externalScripts = records(dom.data.externalScripts).filter((script) => text(script.tagNameFromUrl) === input.expectation.tagName);
   const bootstrapScripts = records(dom.data.bootstrapScripts).filter((script) => Array.isArray(script.referencedTags) && script.referencedTags.includes(input.expectation.tagName));
   return { externalScriptCount: externalScripts.length, bootstrapScriptCount: bootstrapScripts.length, anchorCount: anchors.length };
@@ -149,9 +156,9 @@ function validateDom(input: IntegrationValidationInput, doms: readonly Evidence[
   const dom = doms.at(-1) ?? null;
   if (dom === null) return result(input, "TC-13", "UNKNOWN", "DOM snapshot", "unavailable", []);
   const allAnchors = records(dom.data.anchors);
-  const anchors = allAnchors.filter((anchor) => text(anchor.id) === input.expectation.tagName);
+  const anchors = allAnchors.filter((anchor) => isTagAnchorId(text(anchor.id), input.expectation.tagName));
   const externalScripts = records(dom.data.externalScripts).filter((script) => text(script.tagNameFromUrl) === input.expectation.tagName);
-  const mutations = records(dom.data.mutations).filter((mutation) => text(mutation.tagName) === input.expectation.tagName);
+  const mutations = records(dom.data.mutations).filter((mutation) => isTagAnchorId(text(mutation.tagName), input.expectation.tagName));
   const failures: string[] = [];
   const floating = input.expectation.tag.floatingMode === "floating";
   if (!floating && anchors.length !== input.expectation.expectedAnchorCount) failures.push(`expected ${input.expectation.expectedAnchorCount} anchor(s), observed ${anchors.length}`);

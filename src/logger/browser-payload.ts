@@ -90,6 +90,16 @@ function blankFields(): Record<LoggerBodyField, string | null> {
   return { event: null, tagName: null, domainName: null, page_url: null, dep: null };
 }
 
+// The logger sends names such as "loaded", "blocked_ima" or "error" where the event list says "Loaded",
+// "Blocked IMA" or "Error"; compare ignoring case, spaces, underscores and hyphens.
+const looseKey = (value: string) => value.toLowerCase().replace(/[\s_-]+/g, "");
+
+function looseAlias(aliases: Record<string, string>, rawEvent: string): string | null {
+  const key = looseKey(rawEvent);
+  const matches = new Set(Object.entries(aliases).filter(([raw, canonical]) => looseKey(raw) === key || looseKey(canonical) === key).map(([, canonical]) => canonical));
+  return matches.size === 1 ? [...matches][0]! : null;
+}
+
 export function parseBrowserLoggerPayload(body: string | null, contentType: string, aliasProfile: EventAliasProfile): ParsedBrowserLoggerPayload {
   const aliases = parseEventAliasProfile(aliasProfile).aliases;
   const parsed = decodedBody(body, contentType);
@@ -116,7 +126,7 @@ export function parseBrowserLoggerPayload(body: string | null, contentType: stri
   }
 
   const rawEvent = fields.event;
-  const canonicalEvent = rawEvent === null ? null : aliases[rawEvent] ?? null;
+  const canonicalEvent = rawEvent === null ? null : aliases[rawEvent] ?? looseAlias(aliases, rawEvent);
   if (rawEvent !== null && canonicalEvent === null) {
     diagnostics.push({ code: "unknown_event", severity: "warning", field: "event", detail: `Unknown event name: ${rawEvent}` });
   }

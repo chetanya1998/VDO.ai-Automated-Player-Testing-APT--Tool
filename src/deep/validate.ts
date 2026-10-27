@@ -21,6 +21,7 @@ import { validateLayout } from "../rules/layout.js";
 import { validateLoggerPresence } from "../rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "../rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "../rules/viewability.js";
+import { applyActiveViewEvidence, summarizeActiveView } from "../rules/activeview.js";
 import { productForTag, validateDependencyBuild, validateEventSanity, validateTagDomain } from "./cases.js";
 import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScrollSettings } from "./runner.js";
 
@@ -383,6 +384,12 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   });
   const articleEpoch = articleEpochs[0]!;
   const bundle = normalizeEvidence({ run, capture: browser.capture, articleEpochs, profile, eventAliases: aliases, physicalLoadId: `${runId}-load-1` });
+  // Tech Doc: a page installs the tag either with a direct <script src> (no inline snippet) or with the documented
+  // inline snippet. Expect whichever single form the page uses; two or more snippets still fail TC-3/TC-13.
+  const snippetCounts = browser.capture.evidence.filter((item) => item.source === "browser_dom" && item.data.kind === "page_snapshot")
+    .map((item) => (Array.isArray(item.data.bootstrapScripts) ? item.data.bootstrapScripts : [])
+      .filter((script) => typeof script === "object" && script !== null && !Array.isArray(script) && Array.isArray(script.referencedTags) && script.referencedTags.includes(input.tagName)).length);
+  expectation.expectedBootstrapScriptCount = Math.min(1, Math.max(0, ...snippetCounts));
   const shared = { evidence: bundle.evidence, deviceId: run.deviceId, articleEpochId: articleEpoch.articleEpochId, tagName: expectation.tagName };
 
   // Same composition as the validator's report command, plus the TC-18/19/20 adapters.
@@ -394,6 +401,9 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const demand = validateDemand({ ...runtimeShared, policy: demandPolicy });
   const auction = validateAuction({ ...runtimeShared, policy: auctionPolicy, demandPolicy });
   const viewability = validateViewability({ ...runtimeShared, policy: visibilityPolicy });
+  const viewableMs = visibilityPolicy.products.find((item) => item.product === expectation.tag.product)?.minimumContinuousMs ?? 2_000;
+  const activeView = summarizeActiveView(bundle.evidence, viewableMs);
+  const tc10Viewability = applyActiveViewEvidence(viewability, activeView, visibilityPolicy.status === "confirmed");
   const layout = validateLayout(runtimeShared);
   const deviceCheck = validateDevice({ evidence: bundle.evidence, policy: devicePolicy, device: deviceRule, deviceId: run.deviceId, captureComplete, runtime: { os: browser.metadata.os, browser: browser.metadata.browser, viewport: browser.metadata.viewport } });
   const loggerCaseInput = { ...shared, aliases, captureComplete };
@@ -406,7 +416,7 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     viewability.tc8,
     blocked.check,
     dependencies,
-    applyAuctionContext(applyViewabilityContext(demand.check, viewability), auction),
+    applyAuctionContext(applyViewabilityContext(demand.check, tc10Viewability), auction),
     layout,
     deviceCheck,
     validateTagDomain({ ...loggerCaseInput, targetUrl: input.targetUrl, domain: input.domain }),

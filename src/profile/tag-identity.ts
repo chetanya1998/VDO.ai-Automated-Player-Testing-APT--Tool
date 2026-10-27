@@ -121,8 +121,10 @@ export function parseSiteProfileCatalog(value: unknown): SiteProfileCatalog {
       const prefix = baseTag.split("-", 1)[0] as keyof typeof PREFIX_PRODUCTS;
       if (PREFIX_PRODUCTS[prefix] !== tagProduct) throw new TypeError(`${baseTag} prefix does not match ${tagProduct}`);
       const allowed = strings(tag.allowedTagNames, "tag.allowedTagNames");
-      if (!allowed.includes(baseTag) || allowed.some((name) => ![baseTag, `${baseTag}-v1`, `${baseTag}-v2`].includes(name))) {
-        throw new TypeError(`${baseTag} variants must be the base tag and optional -v1/-v2 names`);
+      // Further tags on a site get -v1, -v2, -v3 and so on (Tech Doc: "-v{Number of Tag}").
+      const isVariant = (name: string) => name === baseTag || (name.startsWith(`${baseTag}-v`) && /^[1-9]\d*$/.test(name.slice(baseTag.length + 2)));
+      if (!allowed.includes(baseTag) || !allowed.every(isVariant)) {
+        throw new TypeError(`${baseTag} variants must be the base tag and optional -v<number> names`);
       }
       for (const name of allowed) {
         if (tagNames.has(name)) throw new TypeError(`duplicate allowed tag: ${name}`);
