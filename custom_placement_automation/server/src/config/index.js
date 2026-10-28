@@ -72,6 +72,11 @@ const config = {
     allowPrivateNetwork: process.env.DEEP_ALLOW_PRIVATE_NETWORK === 'true',
   },
 
+  sticky: {
+    // One URL walks through load, scrolling, ad wait, resizing and closing; about 1–2 minutes on a real page.
+    urlTimeoutMs: envNumber('STICKY_URL_TIMEOUT_MS', 180000),
+  },
+
   checks: {
     maxConcurrentJobs: envInteger('MAX_CONCURRENT_JOBS', 2, 8),
     maxPendingJobs: envInteger('MAX_PENDING_JOBS', 20, 200),

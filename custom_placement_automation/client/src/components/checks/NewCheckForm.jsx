@@ -26,6 +26,14 @@ const CODE_DETAILS = {
 const TYPE_CARDS = [
   { value: CHECK_TYPE.JS, title: 'Custom placement', description: 'Validate vdo.ai placement events' },
   { value: CHECK_TYPE.CSS, title: 'CSS check', description: 'Validate styles from style.css' },
+  { value: CHECK_TYPE.STICKY, title: 'Sticky violation checker', description: '25 floating-player checks (ST-01 to ST-25)' },
+];
+
+// Code the sticky checker can apply first; "none" checks the live tag as the site serves it.
+const STICKY_CODE_OPTIONS = [
+  { value: 'none', label: 'None (live tag)' },
+  { value: CHECK_TYPE.JS, label: 'vdo.ai.js' },
+  { value: CHECK_TYPE.CSS, label: 'style.css' },
 ];
 
 const capitalize = (word) => word[0].toUpperCase() + word.slice(1);
@@ -70,13 +78,18 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const [deepUrlTimeoutMs, setDeepUrlTimeoutMs] = useState(null);
   const [deep, setDeep] = useState(prefill?.deep ?? false);
   const [refreshIntervalSec, setRefreshIntervalSec] = useState(prefill?.refreshIntervalSec ?? null);
+  const [stickyCode, setStickyCode] = useState(prefill?.stickyCode ?? 'none');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const urls = parseUrls(urlsText);
+  const sticky = type === CHECK_TYPE.STICKY;
+  // The code file this check applies: vdo.ai.js, style.css, or none (sticky checker on the live tag).
+  const codeKind = sticky ? stickyCode : type;
   const prefillType = prefill?.type ?? CHECK_TYPE.JS;
-  const storedCode = prefill?.script && prefillType === type ? prefill.script : null;
-  const details = CODE_DETAILS[type];
+  const prefillCodeKind = prefillType === CHECK_TYPE.STICKY ? (prefill?.stickyCode ?? 'none') : prefillType;
+  const storedCode = prefill?.script && prefillCodeKind === codeKind ? prefill.script : null;
+  const details = CODE_DETAILS[codeKind];
   const hasPrefilledScroll = Boolean(prefill?.scroll);
 
   useEffect(() => {
@@ -108,24 +121,27 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
     const pasting = source === 'paste';
     if (devices.length === 0) return setError('Pick at least one device.');
     if (urls.length === 0) return setError('Add at least one URL.');
-    if (pasting && !codeText.trim()) return setError(`Paste the ${type} code to test.`);
-    if (!pasting && !codeFile && !storedCode) return setError(`Choose the ${type} file to test.`);
-    if ((deep || refreshIntervalSec) && deepEngine && !deepEngine.available) return setError(deepEngine.message);
+    const needsCode = codeKind !== 'none';
+    if (needsCode && pasting && !codeText.trim()) return setError(`Paste the ${codeKind} code to test.`);
+    if (needsCode && !pasting && !codeFile && !storedCode) return setError(`Choose the ${codeKind} file to test.`);
+    if (!sticky && (deep || refreshIntervalSec) && deepEngine && !deepEngine.available) return setError(deepEngine.message);
 
     setSubmitting(true);
     try {
-      const useStored = !pasting && !codeFile;
+      const useStored = needsCode && !pasting && !codeFile;
       const job = await startPlacementCheck({
         type,
         domain: domain.trim(),
         tag: tag.trim(),
         devices,
         urls,
-        deep,
-        refreshIntervalSec,
-        script: pasting ? codeText : codeFile ? await codeFile.text() : undefined,
+        // The deep test and refresh check belong to the placement checks, not the sticky checker.
+        deep: sticky ? false : deep,
+        refreshIntervalSec: sticky ? null : refreshIntervalSec,
+        ...(sticky ? { stickyCode } : {}),
+        script: !needsCode ? undefined : pasting ? codeText : codeFile ? await codeFile.text() : undefined,
         scriptId: useStored ? storedCode.id : undefined,
-        scriptName: pasting ? type : (codeFile?.name ?? storedCode?.name),
+        scriptName: !needsCode ? undefined : pasting ? codeKind : (codeFile?.name ?? storedCode?.name),
         scroll: {
           stepViewportRatio: scrollRatio === '' ? undefined : Number(scrollRatio),
           intervalMs: scrollInterval === '' ? undefined : Number(scrollInterval),
@@ -144,11 +160,11 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const limitSeconds = urlTimeoutMs ? Math.round(urlTimeoutMs / 1000) : 60;
   const ratioPercent = Number.isFinite(Number(scrollRatio)) && scrollRatio !== '' ? Math.round(Number(scrollRatio) * 100) : null;
   const summary = [
-    type === CHECK_TYPE.JS ? 'Custom placement' : 'CSS check',
+    type === CHECK_TYPE.JS ? 'Custom placement' : sticky ? `Sticky violation check · 25 checks${stickyCode === 'none' ? '' : ` · with ${stickyCode}`}` : 'CSS check',
     devices.length ? devices.map(capitalize).join(' + ') : 'No device',
     plural(urls.length, 'URL'),
-    ...(deep ? ['Deep test · 23 cases'] : []),
-    ...(refreshIntervalSec ? [`Refresh check · ${refreshIntervalSec} s`] : []),
+    ...(deep && !sticky ? ['Deep test · 23 cases'] : []),
+    ...(refreshIntervalSec && !sticky ? [`Refresh check · ${refreshIntervalSec} s`] : []),
   ];
   const deepUnavailable = deepEngine !== null && !deepEngine.available;
   const deepSeconds = deepUrlTimeoutMs ? Math.round(deepUrlTimeoutMs / 1000) : 90;
@@ -212,10 +228,22 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             </p>
           )}
 
+          {sticky && (
+            <>
+              <p className="form-note">
+                Each page is opened in Chromium and walked through like a reader: load, scroll down until the player floats, wait for the
+                ad, scroll up and down, reach the bottom, resize/zoom the window and click the close button. The player is checked against
+                all 25 sticky test cases (ST-01 to ST-25), with screenshots marking the player in blue and problems in red.
+              </p>
+              <Segmented label="Code to apply first (optional)" options={STICKY_CODE_OPTIONS} value={stickyCode} onChange={(value) => { setStickyCode(value); setCodeFile(null); setCodeText(''); }} disabled={busy} />
+            </>
+          )}
+
+          {codeKind !== 'none' && (
           <div className="code-source">
             <div className="code-source-head">
-              <span className="field-label">{type}</span>
-              {type === CHECK_TYPE.JS && (
+              <span className="field-label">{codeKind}</span>
+              {codeKind === CHECK_TYPE.JS && !sticky && (
                 <span className="field-hint source-help">
                   Must fire <code>vdo:placement</code> <PlacementEventHelp />
                 </span>
@@ -225,9 +253,9 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             {source === 'paste' ? (
               <TextArea
                 id="code"
-                aria-label={`${type} code`}
-                hint={`Sent as ${type} (${(new Blob([codeText]).size / 1024).toFixed(1)} KB). ${details.effect}`}
-                placeholder={`Paste the full contents of ${type} here`}
+                aria-label={`${codeKind} code`}
+                hint={`Sent as ${codeKind} (${(new Blob([codeText]).size / 1024).toFixed(1)} KB). ${details.effect}`}
+                placeholder={`Paste the full contents of ${codeKind} here`}
                 rows={10}
                 spellCheck={false}
                 value={codeText}
@@ -244,6 +272,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
               />
             )}
           </div>
+          )}
         </FormSection>
 
         <FormSection step="2" title="Target site" hint="The publisher domain, its vdo.ai tag and the article URLs to open.">
@@ -288,7 +317,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
           </div>
         </FormSection>
 
-        <FormSection step="3" title="Run settings" hint="Devices to emulate and how the page is scrolled to trigger lazy loading.">
+        <FormSection step="3" title="Run settings" hint={sticky ? 'Devices to emulate. The sticky checker scrolls each page by its own plan.' : 'Devices to emulate and how the page is scrolled to trigger lazy loading.'}>
           <div className="settings-row">
             <div className="field">
               <span className="field-label">Devices</span>
@@ -307,6 +336,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
               </div>
             </div>
 
+            {!sticky && (<>
             <Input
               id="scroll-ratio"
               type="number"
@@ -340,9 +370,11 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
               </div>
               <span className="field-hint">Wait between scroll steps</span>
             </div>
+            </>)}
           </div>
         </FormSection>
 
+        {!sticky && (
         <FormSection step="4" title="Test depth" className={deep ? 'form-block-deep' : ''}>
           <Toggle
             id="deep-test"
@@ -359,7 +391,9 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
           />
           {deepUnavailable && <Alert tone="warning">{deepEngine.message}</Alert>}
         </FormSection>
+        )}
 
+        {!sticky && (
         <FormSection step="5" title="Ad slot refresh check" hint="Optional, separate from the deep test." className={refreshIntervalSec ? 'form-block-deep' : ''}>
           <Toggle
             id="refresh-check"
@@ -383,6 +417,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             />
           )}
         </FormSection>
+        )}
         </div>
 
         {error && <Alert tone="error">{error}</Alert>}

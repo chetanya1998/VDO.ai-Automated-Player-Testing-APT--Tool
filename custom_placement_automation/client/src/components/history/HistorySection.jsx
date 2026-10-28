@@ -4,7 +4,7 @@ import { SearchIcon } from '../ui/icons.jsx';
 import RunResults from '../checks/RunResults.jsx';
 import { clearHistory, deleteRun, getRun, listRuns, runPdfUrl } from '../../api/history.js';
 import { formatDateTime, formatElapsed, formatStarted, runStatus } from '../../utils/format.js';
-import { CHECK_TYPE } from '../../utils/checkTypes.js';
+import { CHECK_TYPE, checkTypeName } from '../../utils/checkTypes.js';
 
 const PAGE_SIZE = 20;
 
@@ -17,13 +17,14 @@ const FILTERS = [
   { value: 'status:error', label: 'Placement errors' },
   { value: `type:${CHECK_TYPE.JS}`, label: 'Custom placement' },
   { value: `type:${CHECK_TYPE.CSS}`, label: 'CSS checks' },
+  { value: `type:${CHECK_TYPE.STICKY}`, label: 'Sticky checks' },
   { value: 'mode:deep', label: 'Deep tests' },
 ];
 
 const BASE_COLUMNS = [
   {
     key: 'status',
-    header: 'Placement check',
+    header: 'Result',
     render: (run) => {
       const status = runStatus(run);
       return <span className={`status-dot status-${status}`}>{STATUS_LABELS[status]}</span>;
@@ -34,8 +35,11 @@ const BASE_COLUMNS = [
     header: 'Check type',
     render: (run) => (
       <span className="domain-cell">
-        {run.type === CHECK_TYPE.CSS ? 'CSS check' : 'Custom placement'}
+        {checkTypeName(run.type)}
         {run.refreshIntervalSec && <small>+ refresh check · {run.refreshIntervalSec} s</small>}
+        {(run.stickySummary?.perUrl ?? []).slice(0, 3).map((item, i, all) => (
+          <small key={`${item.url}-${i}`}>{all.length > 1 ? `URL ${i + 1}: ` : ''}{item.verdictCounts?.FAIL ?? 0} failed · {item.verdictCounts?.WARNING ?? 0} warnings of 25</small>
+        ))}
       </span>
     ),
   },
@@ -53,6 +57,7 @@ const BASE_COLUMNS = [
     key: 'mode',
     header: 'Deep test (23 cases per URL)',
     render: (run) => {
+      if (run.type === CHECK_TYPE.STICKY) return <span className="muted">—</span>;
       if (!run.deep) return <span className="muted">Not run</span>;
       const perUrl = run.deepSummary?.perUrl ?? [];
       if (perUrl.length === 0) return <span className="depth-tag">Deep</span>;
@@ -92,6 +97,7 @@ const toRerunSettings = (run) => ({
   script: run.script ?? null,
   deep: run.deep === true,
   refreshIntervalSec: run.refreshIntervalSec ?? null,
+  stickyCode: run.stickyCode ?? 'none',
   startedAt: run.startedAt,
 });
 

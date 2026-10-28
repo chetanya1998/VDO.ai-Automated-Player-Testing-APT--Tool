@@ -15,6 +15,7 @@ const REASON_LABELS = {
   wrapper_hidden: 'Wrapper hidden',
   timeout: 'Page load timed out',
   page_closed: 'Page closed during check',
+  player_not_found: 'vdo.ai player not found',
 };
 
 let pdfBrowserPromise = null;
@@ -184,7 +185,51 @@ function renderExtraChecks(checks = []) {
     </div>`;
 }
 
+// Sticky violation checker: 25 checks per URL (ST-01..ST-12 core, ST-13..ST-25 additional).
+function renderStickyCase(c) {
+  const tone = VERDICT_CLASS[c.verdict] ?? 'unknown';
+  return `<tr class="${tone}">
+    <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td>
+    <td><b>${escapeHtml(c.title)}</b><div class="plain"><i>What it tests:</i> ${escapeHtml(c.checks)}</div><div class="plain"><i>Expected:</i> ${escapeHtml(c.expected)}</div></td>
+    <td><b>${escapeHtml(c.summary)}</b>${c.seenAt ? `<div class="plain"><i>Seen at:</i> ${escapeHtml(c.seenAt)}</div>` : ''}</td>
+  </tr>`;
+}
+
+function renderStickyResult(run, result, index, images) {
+  const sticky = result.sticky;
+  const table = (group, heading) => {
+    const rows = (sticky?.cases ?? []).filter((c) => c.group === group);
+    return rows.length ? `<p class="deep-h">${heading}</p><table class="cases"><thead><tr><th>Check</th><th>What it tests</th><th>Result on this page</th></tr></thead><tbody>${rows.map(renderStickyCase).join('')}</tbody></table>` : '';
+  };
+  const facts = sticky
+    ? [
+        ['Player type', sticky.playerType],
+        ['Floating started', sticky.floatingStartedAt ? `${sticky.floatingStartedAt.label} (scrolled ${sticky.floatingStartedAt.scrollY} px)` : 'never'],
+        ['Viewport', sticky.viewport ? `${sticky.viewport.width}×${sticky.viewport.height}` : '—'],
+        ['Snapshots taken', String(sticky.snapshots)],
+        ['Duration', formatSeconds(result.durationMs)],
+      ]
+    : [['Duration', formatSeconds(result.durationMs)], ...(result.error ? [['Error', result.error]] : [])];
+  return `
+  <section class="result ${result.status} has-deep">
+    <header>
+      <span class="badge ${result.status}">Sticky: ${result.status.toUpperCase()}</span>
+      ${sticky ? `<span class="badge ${VERDICT_CLASS[sticky.overallVerdict] ?? 'unknown'}">${sticky.verdictCounts.FAIL} failed · ${sticky.verdictCounts.WARNING} warnings</span>` : ''}
+      <span class="index">#${index + 1}</span>
+      <span class="url">${escapeHtml(result.url)}</span>
+    </header>
+    ${result.reasons.length ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>` : ''}
+    <dl>${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+    ${sticky ? renderVerdictTiles(sticky.verdictCounts, 25) : ''}
+    ${images.length ? `<div class="shots"><p class="deep-h shots-h">Evidence screenshots (blue = vdo.ai player, red = problem area)</p>${images.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
+    ${table('core', 'Core checks (ST-01 to ST-12, must test)')}
+    ${table('additional', 'Additional checks (ST-13 to ST-25, recommended)')}
+    ${sticky?.notes?.length ? `<p class="deep-h">Notes</p><ul class="notes">${sticky.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
 function renderResult(run, result, index, images, deepImages) {
+  if (run.type === 'sticky') return renderStickyResult(run, result, index, images);
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
   const facts = [
@@ -236,15 +281,20 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   const status = runStatus(run);
   const meta = [
     ['Domain', run.domain],
-    ['Check type', run.type ?? 'vdo.ai.js'],
+    ['Check type', run.type === 'sticky' ? 'Sticky violation check (ST-01 to ST-25)' : run.type ?? 'vdo.ai.js'],
     ['Device', run.device],
     ['Started', formatDateTime(run.startedAt)],
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
-    ['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default'],
-    ['Deep test', run.deep ? 'On (all 23 cases per URL, plus the safe frame check)' : 'Off'],
-    ['Ad slot refresh check', run.refreshIntervalSec ? `On (every ${run.refreshIntervalSec} s)` : 'Off'],
+    ...(run.type === 'sticky' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
+    ...(run.type === 'sticky'
+      ? [['Code applied', run.stickyCode === 'none' || !run.stickyCode ? 'None (live tag as served)' : run.stickyCode]]
+      : [
+          ['Deep test', run.deep ? 'On (all 23 cases per URL, plus the safe frame check)' : 'Off'],
+          ['Ad slot refresh check', run.refreshIntervalSec ? `On (every ${run.refreshIntervalSec} s)` : 'Off'],
+        ]),
   ];
+  const sticky = run.type === 'sticky';
 
   return `<!doctype html>
 <html lang="en">
@@ -261,6 +311,7 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   .meta dd { margin: 0; overflow-wrap: anywhere; }
   .section-title { font-size: 13px; margin: 0 0 2px; }
   .deep.extra { break-inside: avoid; }
+  .shots-h { grid-column: 1 / -1; margin: 0; }
   .muted-note { font-weight: 400; font-size: 10px; color: #5c6570; }
   .part-h { margin: 2px 0 4px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5c6570; }
   .section-note { margin: 0 0 6px; color: #5c6570; font-size: 9.5px; }
@@ -327,11 +378,11 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">Placement check: ${status.toUpperCase()}</span></h1>
-  <div class="sub">Placement report · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
+  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${sticky ? 'Sticky violation check' : 'Placement check'}: ${status.toUpperCase()}</span></h1>
+  <div class="sub">${sticky ? 'Sticky violation report' : 'Placement report'} · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
   <dl class="meta">${meta.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-  <h2 class="section-title">Custom placement check</h2>
-  <p class="section-note">Counts URLs. A URL passes when your placement code puts a visible player on the page.</p>
+  <h2 class="section-title">${sticky ? 'Sticky violation check · 25 checks per URL' : 'Custom placement check'}</h2>
+  <p class="section-note">${sticky ? 'Counts URLs. A URL fails when any of its 25 checks fails; warnings need a look but do not fail it. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
   <div class="summary">
     <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs checked</div>
     <div class="pass"><b>${run.passCount}</b>URLs passed</div>

@@ -39,7 +39,9 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
   const { done, total } = job.progress;
   const percent = total ? Math.round((done / total) * 100) : 0;
   // Deep jobs run the placement check and the 23-case deep test once per URL and device.
-  const progressLabel = job.deep ? `Checking… ${done}/${total} steps (placement + deep test per URL)` : `Checking… ${done}/${total} URLs`;
+  const progressLabel = job.type === 'sticky'
+    ? `Sticky check… ${done}/${total} URLs (about 1 minute each)`
+    : job.deep ? `Checking… ${done}/${total} steps (placement + deep test per URL)` : `Checking… ${done}/${total} URLs`;
 
   return (
     <Card title="Current check">

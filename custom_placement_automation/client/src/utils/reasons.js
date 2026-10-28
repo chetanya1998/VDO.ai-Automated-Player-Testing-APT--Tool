@@ -7,6 +7,7 @@ export const REASON_LABELS = {
   wrapper_hidden: 'Wrapper hidden',
   timeout: 'Page load timed out',
   page_closed: 'Page closed during check',
+  player_not_found: 'vdo.ai player not found',
 };
 
 export const reasonLabel = (reason) => REASON_LABELS[reason] ?? reason;

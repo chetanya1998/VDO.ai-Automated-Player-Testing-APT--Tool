@@ -1,21 +1,24 @@
 import { Badge } from '../ui';
 import ResultCard from './ResultCard.jsx';
+import StickyResults from './StickyResults.jsx';
 import { VERDICTS, VERDICT_HELP, verdictLabel, verdictTone } from '../../utils/verdicts.js';
-import { checkTypeLabel } from '../../utils/checkTypes.js';
+import { CHECK_TYPE, checkTypeLabel } from '../../utils/checkTypes.js';
 import { formatDateTime, formatDuration, formatScroll, runStatus } from '../../utils/format.js';
 
 export default function RunResults({ run }) {
   const status = runStatus(run);
+  const sticky = run.type === CHECK_TYPE.STICKY;
   const total = run.passCount + run.failCount + run.errorCount;
   const deepRows = run.results.filter((result) => result.deep).map((result) => ({ url: result.url, overallVerdict: result.deep.overallVerdict, verdictCounts: result.deep.verdictCounts }));
 
   return (
     <section className="run">
       <header className="run-header">
-        <Badge tone={status}>Placement: {status.toUpperCase()}</Badge>
+        <Badge tone={status}>{sticky ? 'Sticky check' : 'Placement'}: {status.toUpperCase()}</Badge>
         <Badge tone="neutral">{checkTypeLabel(run.type)}</Badge>
         {run.deep && <Badge tone="accent">Deep test</Badge>}
         {run.refreshIntervalSec && <Badge tone="accent">Refresh check · {run.refreshIntervalSec} s</Badge>}
+        {sticky && <Badge tone="accent">{run.stickyCode && run.stickyCode !== 'none' ? `With ${run.stickyCode}` : 'Live tag'}</Badge>}
         <strong>{run.tag}</strong>
         <span className="muted">
           {run.domain} · {run.device}
@@ -29,8 +32,8 @@ export default function RunResults({ run }) {
       {/* Placement counts URLs; the deep test counts 23 test cases per URL. Kept apart so they are never added together. */}
       <section className="summary-section">
         <header className="summary-section-head">
-          <h4>Custom placement check</h4>
-          <p>Counts URLs. A URL passes when your placement code puts a visible player on the page.</p>
+          <h4>{sticky ? 'Sticky violation check · 25 checks per URL' : 'Custom placement check'}</h4>
+          <p>{sticky ? 'Counts URLs. A URL fails when any of its 25 checks fails; warnings need a look but do not fail it.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
         </header>
         <div className="stat-tiles">
           <div className="stat-tile"><b>{total}</b><span>URLs checked</span></div>
@@ -84,7 +87,9 @@ export default function RunResults({ run }) {
 
       <div className="results">
         {run.results.map((result, i) => (
-          <ResultCard key={result.id ?? `${result.url}-${i}`} result={result} index={i} type={run.type} />
+          sticky
+            ? <StickyResults key={result.id ?? `${result.url}-${i}`} result={result} index={i} />
+            : <ResultCard key={result.id ?? `${result.url}-${i}`} result={result} index={i} type={run.type} />
         ))}
       </div>
     </section>

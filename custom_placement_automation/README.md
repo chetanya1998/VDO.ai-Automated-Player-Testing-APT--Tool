@@ -8,7 +8,9 @@ An optional **deep test** validates all 23 player test cases on each URL, on top
 
 ## Features
 
-### Two kinds of checks
+### Three kinds of checks
+
+The first two check placement code. The third, the **sticky violation checker**, checks how a floating player behaves; see [Sticky violation checker](#sticky-violation-checker-st-01-to-st-25).
 
 | | **Custom placement (`vdo.ai.js`)** | **CSS (`style.css`)** |
 |---|---|---|
@@ -87,6 +89,43 @@ These are shown in their own **Additional checks** block under each URL and in t
   - **Unknown:** the player never asked for an ad.
   - Each URL and device takes about the interval plus 20 s longer. With the deep test off, the refresh check still opens each URL once more in the deep test browser, but only the refresh result is kept.
 
+### Sticky violation checker (ST-01 to ST-25)
+
+Pick **Sticky violation checker** in step 1. It runs the 25 checks from *VDOAI Sticky Violation Test Cases – Chromium* on each URL and device. Like the placement checks, it can first apply a `vdo.ai.js` or `style.css` (**Code to apply first**). The default is **None**: the live tag as the site serves it. The deep test and refresh check are not offered with it.
+
+**What the tool does on each page** (about 40–90 s per URL and device):
+
+1. **Initial load:** it watches the page for 5 seconds without scrolling.
+2. **Scroll down:** half a screen at a time, until the player's place in the article is well behind.
+3. **Ad load:** it waits 10 s without scrolling while the ad loads.
+4. **Small scrolls:** up and down a little, three times.
+5. **Bottom:** it scrolls to the bottom of the page (at most 15 screens, for infinite scroll).
+6. **Window sizes:** it goes back to the article and tries other sizes. Desktop gets 1024×640, 800×600, and 125% and 150% zoom. Mobile gets landscape and a 360×640 phone.
+7. **Close:** it clicks the floating player's close button and keeps scrolling.
+
+**How it measures:**
+
+- At every step it records where the vdo.ai player is: in-content or floating (`position: fixed`).
+- It hit-tests what the player covers: header, headline, footer links, consent banners, other sticky ads, page links and buttons.
+- It checks whether the close and Skip Ad buttons are fully on screen, not cut off, and on top. Skip Ad is found inside the ad iframes. The tool never clicks Skip Ad on live ads.
+- It also notes page and player spacing, and the site's CSS around the player.
+
+**Results:**
+
+- Each check gets Pass / Fail / Warning / Unknown / N/A with a plain-language reason. A URL fails when any check fails; warnings don't fail it.
+- The 25 checks are shown as Core (ST-01–12) and Additional (ST-13–25) on the dashboard and in the PDF. Each says where the problem was seen.
+- Up to 8 evidence screenshots per URL mark the player in blue and problem areas in red.
+
+**Rules worth knowing:**
+
+- **ST-08:** a floating player covering more than 30% of the screen fails. The Better Ads Standards call that a large sticky ad.
+- **ST-06/07/23:** "too early" means floating before the player's place in the article has entered the screen. The tool doesn't know each tag's configured activation point.
+- **ST-22:** an empty gap left in the article is a Warning (it may be kept on purpose so the text doesn't jump). It fails only when the gap is more than 1.5 times the player's height.
+- **ST-24:** zoom is emulated with the smaller CSS window a zoomed browser has.
+- **ST-18/25:** these apply only when a next article loads in the page. Each URL otherwise opens fresh, so stale state can't carry over from another page.
+
+**Note:** these are internal preventative QA checks, not official Google violation triggers. A failure needs investigation, and a pass does not guarantee policy compliance.
+
 ### History
 
 - Every run is saved locally and listed in **History**.
@@ -161,9 +200,9 @@ implementation/         planning notes
 | GET | `/api/health` | Health check |
 | GET | `/api/ready` | Database, queue and Chromium installation readiness |
 | GET | `/api/settings` | Default scroll settings, limits and the per-URL time limit |
-| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test and the safe frame check; `"refreshIntervalSec": 30 \| 45 \| 60` adds the ad slot refresh check) |
+| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test and the safe frame check; `"refreshIntervalSec": 30 \| 45 \| 60` adds the ad slot refresh check; `"type": "sticky"` runs the sticky violation checker, with `"stickyCode": "none" \| "vdo.ai.js" \| "style.css"`) |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
-| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`) |
+| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`; `type=sticky` for sticky checks) |
 | GET | `/api/history/:runId` | One run with its results |
 | GET | `/api/history/:runId/pdf` | Download the run as a PDF |
 | DELETE | `/api/history/:runId` | Delete one run and its screenshots |
