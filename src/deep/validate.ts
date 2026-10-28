@@ -23,6 +23,7 @@ import { parseTimingPolicy, validateTiming } from "../rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "../rules/viewability.js";
 import { applyActiveViewEvidence, summarizeActiveView } from "../rules/activeview.js";
 import { productForTag, validateDependencyBuild, validateEventSanity, validatePlayerFileTiming, validateTagDomain } from "./cases.js";
+import { REFRESH_INTERVALS_SEC, REFRESH_LATE_MS, validateSafeFrame, validateSlotRefresh, type ExtraCheck, type RefreshIntervalSec } from "./extra.js";
 import { CASE_GUIDE, resultMeaning } from "./guide.js";
 import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScreenshot, type DeepScrollSettings } from "./runner.js";
 
@@ -70,6 +71,8 @@ export interface DeepValidationInput {
   // Defaults to https://a.vdo.ai/core/<tag>/vdo.ai.js; local fixture tests serve the tag themselves.
   loaderUrl?: string;
   allowPrivateNetwork?: boolean;
+  // Optional ad slot refresh check: after the normal observation, keep the player in view and watch for a new ad.
+  refresh?: { intervalSec: RefreshIntervalSec };
   runBrowser?: (options: DeepBrowserRunOptions) => Promise<DeepBrowserRunResult>;
 }
 
@@ -108,6 +111,8 @@ export interface DeepValidationSummary {
   probableCauses: Array<{ testCaseId: TestCaseId; code: string; summary: string; confidence: string; owner: string; nextChecks: string[]; rules: "draft" | "confirmed" }>;
   executionErrors: Array<{ stage: string; message: string }>;
   limitations: string[];
+  // Checks added on top of the 23 test cases; never counted in verdictCounts.
+  extraChecks: ExtraCheck[];
 }
 
 export interface DeepValidationResult {
@@ -393,6 +398,11 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const policies = { aliases, timing, eventRules, runtimePolicy, demandPolicy, auctionPolicy, visibilityPolicy, articlePolicy, devicePolicy, rcaPolicy };
   const draftPolicies = Object.entries(policies).flatMap(([name, policy]) => policy.status === "confirmed" ? [] : [name]);
 
+  if (input.refresh !== undefined && !REFRESH_INTERVALS_SEC.includes(input.refresh.intervalSec)) throw new TypeError(`refresh.intervalSec must be one of ${REFRESH_INTERVALS_SEC.join(", ")}`);
+  const playerSelector = `#vdoai_parentWrapperDiv, .vdoai_parentWrapperDiv, #${input.tagName}, [id^="${input.tagName}-"]`;
+  // The watch covers one full interval plus the late tolerance, with a few seconds to spare.
+  const refreshWatchMs = input.refresh === undefined ? 0 : input.refresh.intervalSec * 1000 + REFRESH_LATE_MS + 5_000;
+
   const runId = `deep-${randomUUID()}`;
   const queued = createQueuedRun({ runId, profileId, targetUrl: input.targetUrl, deviceId: input.device.id, createdAt: new Date().toISOString() });
   const browser = await (input.runBrowser ?? runDeepBrowser)({
@@ -400,14 +410,16 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     browserExecutablePath: input.browserExecutablePath,
     contextOptions: input.device.contextOptions,
     navigationTimeoutMs: input.navigationTimeoutMs ?? 30_000,
-    totalTimeoutMs: input.totalTimeoutMs ?? 90_000,
+    totalTimeoutMs: (input.totalTimeoutMs ?? 90_000) + refreshWatchMs,
     observeAfterLoadMs: input.observeAfterLoadMs ?? 15_000,
     visibilitySampleIntervalMs: visibilityPolicy.sampleIntervalMs,
     ...(input.scroll === undefined ? {} : { scroll: input.scroll }),
     ...(input.code?.type === "vdo.ai.js" ? { scriptOverride: { tagName: input.tagName, body: input.code.body, loaderOrigin: new URL(loaderUrlFor(input)).origin } } : {}),
     ...(input.code?.type === "style.css" ? { injectCss: input.code.body } : {}),
     ...(input.allowPrivateNetwork === undefined ? {} : { allowPrivateNetwork: input.allowPrivateNetwork }),
-    screenshots: { playerSelector: `#vdoai_parentWrapperDiv, .vdoai_parentWrapperDiv, #${input.tagName}, [id^="${input.tagName}-"]` },
+    screenshots: { playerSelector },
+    safeFrames: { playerSelector },
+    ...(input.refresh === undefined ? {} : { refreshWatch: { playerSelector, watchMs: refreshWatchMs }, captureLimits: { maxEvidenceRecords: 25_000 } }),
   });
   const executionState = browser.status === "completed" ? "completed" : browser.status === "timed_out" ? "timed_out" : "errored";
   const run = parseRun({ ...queued, executionState });
@@ -528,6 +540,10 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     })),
     executionErrors: report.executionErrors.map((error) => ({ stage: error.stage, message: error.message })),
     limitations,
+    extraChecks: [
+      validateSafeFrame({ evidence: browser.capture.evidence, ...(browser.safeFrames === undefined ? {} : { safeFrames: browser.safeFrames }), completed: browser.status === "completed" }),
+      ...(input.refresh === undefined ? [] : [validateSlotRefresh({ evidence: browser.capture.evidence, intervalSec: input.refresh.intervalSec, refreshWindow: browser.refreshWindow ?? null })]),
+    ],
   };
   return { summary, report, screenshots: browser.screenshots ?? [] };
 }

@@ -147,6 +147,43 @@ function renderDeep(deep, deepImages = []) {
     </div>`;
 }
 
+const EXTRA_DETAIL_LABELS = {
+  safeFramesLoaded: 'SafeFrames loaded on the page',
+  insidePlayer: 'SafeFrame inside the player',
+  shownInPlayer: 'Shown with a real size',
+  keptSeparateFromPage: 'Kept separate from the page',
+  size: 'Ad size (px)',
+  onScreen: 'Visible on screen',
+  otherSafeFramesOnPage: 'Other SafeFrame ads on the page',
+  failedToLoad: 'Failed to load',
+  intervalSec: 'Chosen interval (s)',
+  adRequestSource: 'Ad requests read from',
+  adCycles: 'Ad cycles seen',
+  secondsBetweenAdCycles: 'Seconds between ad cycles',
+  watchedWithPlayerInViewSec: 'Watched with the player in view (s)',
+};
+const showDetail = (value) => (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : Array.isArray(value) ? value.join(', ') || '—' : String(value));
+
+// Safe frame and refresh checks: listed on their own, never counted in the 23-case totals.
+function renderExtraChecks(checks = []) {
+  if (!checks.length) return '';
+  return `
+    <div class="deep extra">
+      <h3>Additional checks <span class="muted-note">(not part of the 23 test cases)</span></h3>
+      <table class="cases"><thead><tr><th>Check</th><th>What it looks at</th><th>Result on this page</th></tr></thead><tbody>${checks
+        .map((check) => {
+          const tone = VERDICT_CLASS[check.verdict] ?? 'unknown';
+          const details = Object.entries(check.details ?? {}).map(([key, value]) => `${escapeHtml(EXTRA_DETAIL_LABELS[key] ?? key)}: ${escapeHtml(showDetail(value))}`).join(' · ');
+          return `<tr class="${tone}">
+            <td class="case-id">${escapeHtml(check.title)}<span class="badge ${tone}">${escapeHtml(VERDICT_LABEL[check.verdict] ?? check.verdict)}</span></td>
+            <td>${escapeHtml(check.checks || '—')}</td>
+            <td><b>${escapeHtml(check.summary)}</b><div class="plain">${escapeHtml(check.meaning)}</div>${details ? `<div class="plain"><i>Details:</i> ${details}</div>` : ''}</td>
+          </tr>`;
+        })
+        .join('')}</tbody></table>
+    </div>`;
+}
+
 function renderResult(run, result, index, images, deepImages) {
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
@@ -159,14 +196,15 @@ function renderResult(run, result, index, images, deepImages) {
     ...(result.error ? [['Error', result.error]] : []),
   ];
 
+  const hasMore = Boolean(result.deep || result.extraChecks?.length);
   return `
-  <section class="result ${result.status}${result.deep ? ' has-deep' : ''}">
+  <section class="result ${result.status}${hasMore ? ' has-deep' : ''}">
     <header>
       <span class="badge ${result.status}">Placement: ${result.status.toUpperCase()}</span>
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
-    ${result.deep ? '<p class="part-h">Custom placement check</p>' : ''}
+    ${hasMore ? '<p class="part-h">Custom placement check</p>' : ''}
     ${
       result.reasons.length
         ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>`
@@ -190,6 +228,7 @@ function renderResult(run, result, index, images, deepImages) {
         : ''
     }
     ${renderDeep(result.deep, deepImages)}
+    ${renderExtraChecks(result.extraChecks)}
   </section>`;
 }
 
@@ -203,7 +242,8 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
     ['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default'],
-    ['Deep test', run.deep ? 'On (all 23 cases per URL)' : 'Off'],
+    ['Deep test', run.deep ? 'On (all 23 cases per URL, plus the safe frame check)' : 'Off'],
+    ['Ad slot refresh check', run.refreshIntervalSec ? `On (every ${run.refreshIntervalSec} s)` : 'Off'],
   ];
 
   return `<!doctype html>
@@ -220,6 +260,8 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   .meta dt { color: #5c6570; }
   .meta dd { margin: 0; overflow-wrap: anywhere; }
   .section-title { font-size: 13px; margin: 0 0 2px; }
+  .deep.extra { break-inside: avoid; }
+  .muted-note { font-weight: 400; font-size: 10px; color: #5c6570; }
   .part-h { margin: 2px 0 4px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5c6570; }
   .section-note { margin: 0 0 6px; color: #5c6570; font-size: 9.5px; }
   table.per-url { margin-bottom: 6px; }

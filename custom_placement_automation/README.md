@@ -72,12 +72,27 @@ Turn on **Automated player testing — deep** in step 4 of the form. The placeme
 - **Network:** deep tests allow public internet traffic but refuse private-network addresses. Set `DEEP_ALLOW_PRIVATE_NETWORK=true` in `server/.env` to test internal staging servers.
 - **Time:** about 15 s of observation per URL and device (`DEEP_OBSERVE_MS`), capped at `DEEP_URL_TIMEOUT_MS` (default 90 s).
 
+### Additional checks (safe frame, ad slot refresh)
+
+These are shown in their own **Additional checks** block under each URL and in the PDF. They are never added to the 23-case totals.
+
+- **Safe frame check** (runs with every deep test): looks for Google SafeFrame ad frames (`*.safeframe.googlesyndication.com`) inside the vdo.ai player, about every 5 seconds and at the end of the visit.
+  - **Pass:** a SafeFrame in the player had a real size, was visible and was on a different address from the page.
+  - **Warning:** it was hidden, had no size, failed to load, or was on the page's own address.
+  - **N/A:** no ad in the player used a SafeFrame. Video ads played through Google IMA don't use one. SafeFrames from the publisher's own ads, outside the player, are counted but not judged.
+- **Ad slot refresh check** (step 5 of the form, separate from the deep test): choose **30, 45 or 60 s**. After the normal visit the player is kept in view for the interval plus 20 s, and the tool watches for a new ad request (the player's *Ad Request* logger events, or Google Ad Manager requests if the player sends none).
+  - **Pass:** a new ad request came 5 s early to 15 s late, measured from the previous one.
+  - **Warning:** the slot refreshed, but at a different interval.
+  - **Fail:** no new ad request came while the player stayed in view.
+  - **Unknown:** the player never asked for an ad.
+  - Each URL and device takes about the interval plus 20 s longer. With the deep test off, the refresh check still opens each URL once more in the deep test browser, but only the refresh result is kept.
+
 ### History
 
 - Every run is saved locally and listed in **History**.
 - **Re-run:** fills the form with that run's settings and stored script so you can change something and run it again.
 - **PDF:** downloads a report for the run, with all results and screenshots. Deep runs add separate result totals, a legend of what each result means, and for every test case what it tested and what its result means in plain words.
-- **Re-run** keeps the deep test setting.
+- **Re-run** keeps the deep test and refresh check settings.
 - **Delete / Clear all:** removes runs and their screenshots.
 
 ## Quick start
@@ -146,7 +161,7 @@ implementation/         planning notes
 | GET | `/api/health` | Health check |
 | GET | `/api/ready` | Database, queue and Chromium installation readiness |
 | GET | `/api/settings` | Default scroll settings, limits and the per-URL time limit |
-| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test) |
+| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test and the safe frame check; `"refreshIntervalSec": 30 \| 45 \| 60` adds the ad slot refresh check) |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
 | GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`) |
 | GET | `/api/history/:runId` | One run with its results |

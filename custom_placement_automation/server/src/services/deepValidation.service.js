@@ -9,6 +9,9 @@ import logger from '../utils/logger.js';
 // build (pnpm build in the repository root) instead of re-implementing the rules here.
 let enginePromise = null;
 
+// Same intervals as the engine's refresh check; kept here so requests validate without loading the engine.
+export const REFRESH_INTERVALS_SEC = [30, 45, 60];
+
 const engineMissingMessage = () =>
   `Deep test engine is not built. Run "pnpm install && pnpm build" in the repository root (${config.deep.repoRoot}), then retry.`;
 
@@ -32,7 +35,13 @@ export async function deepReadiness() {
   }
 }
 
-function errorSummary(url, device, error) {
+// Extra checks that could not run are shown as not evaluated rather than left out.
+function unevaluatedExtraChecks(refreshIntervalSec, message) {
+  const unknown = (id, title) => ({ id, title, checks: '', meaning: 'The check could not run for this URL.', verdict: 'UNKNOWN', summary: message, details: {} });
+  return [unknown('SAFE_FRAME', 'Safe frame check'), ...(refreshIntervalSec ? [unknown('SLOT_REFRESH', `Ad slot refresh (every ${refreshIntervalSec} s)`)] : [])];
+}
+
+function errorSummary(url, device, error, refreshIntervalSec) {
   return {
     schemaVersion: 1,
     targetUrl: url,
@@ -44,10 +53,11 @@ function errorSummary(url, device, error) {
     probableCauses: [],
     executionErrors: [{ stage: 'run', message: error.message.split('\n')[0] }],
     limitations: ['The deep test could not run for this URL, so none of the 23 cases were evaluated.'],
+    extraChecks: unevaluatedExtraChecks(refreshIntervalSec, error.message.split('\n')[0]),
   };
 }
 
-export async function runDeepCheck({ url, domain, tag, device, type, script, scroll }) {
+export async function runDeepCheck({ url, domain, tag, device, type, script, scroll, refreshIntervalSec = null }) {
   try {
     const engine = await loadEngine();
     const browser = browserChoice();
@@ -65,12 +75,13 @@ export async function runDeepCheck({ url, domain, tag, device, type, script, scr
       totalTimeoutMs: config.deep.urlTimeoutMs,
       configDirectory: path.join(config.deep.repoRoot, 'config'),
       allowPrivateNetwork: config.deep.allowPrivateNetwork,
+      ...(refreshIntervalSec ? { refresh: { intervalSec: refreshIntervalSec } } : {}),
     });
     logger.info(`[DEEP ${summary.overallVerdict}] ${url} (${device}) ${JSON.stringify(summary.verdictCounts)}`);
     return { summary, screenshots: screenshots ?? [] };
   } catch (error) {
     logger.error(`Deep test failed for ${url} (${device})`, error);
-    return { summary: errorSummary(url, device, error), screenshots: [] };
+    return { summary: errorSummary(url, device, error, refreshIntervalSec), screenshots: [] };
   }
 }
 

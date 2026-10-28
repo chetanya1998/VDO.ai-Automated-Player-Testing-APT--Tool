@@ -15,6 +15,7 @@ export default function RunResults({ run }) {
         <Badge tone={status}>Placement: {status.toUpperCase()}</Badge>
         <Badge tone="neutral">{checkTypeLabel(run.type)}</Badge>
         {run.deep && <Badge tone="accent">Deep test</Badge>}
+        {run.refreshIntervalSec && <Badge tone="accent">Refresh check · {run.refreshIntervalSec} s</Badge>}
         <strong>{run.tag}</strong>
         <span className="muted">
           {run.domain} · {run.device}

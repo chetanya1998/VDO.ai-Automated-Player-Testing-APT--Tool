@@ -13,6 +13,10 @@ test('deep option must be a boolean and readiness reports the deep engine separa
       body: JSON.stringify({ domain: 'example.com', tag: 'v-example', devices: ['desktop'], urls: ['https://example.com/a'], deep: 'yes' }) });
     assert.equal(response.status, 400);
     assert.match((await response.json()).error, /deep/);
+    const refresh = await fetch(`${base}/api/placement-checks`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ domain: 'example.com', tag: 'v-example', devices: ['desktop'], urls: ['https://example.com/a'], refreshIntervalSec: 20 }) });
+    assert.equal(refresh.status, 400);
+    assert.match((await refresh.json()).error, /30, 45, 60/);
     const state = await (await fetch(`${base}/api/ready`)).json();
     assert.equal(typeof state.deep.available, 'boolean');
   } finally { await new Promise(resolve => server.close(resolve)); }
@@ -27,6 +31,7 @@ test('a deep check that cannot run returns 23 unevaluated cases instead of faili
   assert.equal(summary.executionState, 'errored');
   assert.equal(summary.verdictCounts.UNKNOWN, 23);
   assert.deepEqual(screenshots, []);
+  assert.deepEqual(summary.extraChecks.map((check) => check.id), ['SAFE_FRAME'], 'the refresh check is only added when asked for');
   assert.match(summary.executionErrors[0].message, /public network address/);
 });
 
@@ -44,4 +49,10 @@ test('runs saved before plain-language explanations get them when opened', { ski
   assert.match(tc3.checks, /installed only once/);
   assert.match(tc3.meaning, /more than once/);
   assert.match(tc10.meaning, /could not decide/);
+});
+
+test('a failed visit reports the refresh check as not evaluated', { skip: !(await deepReadiness()).available ? 'run pnpm build in the repository root first' : config.deep.allowPrivateNetwork ? 'DEEP_ALLOW_PRIVATE_NETWORK is on' : false }, async () => {
+  const { summary } = await runDeepCheck({ url: 'http://127.0.0.1:9/article', domain: '127.0.0.1', tag: 'v-example', device: 'desktop', type: 'vdo.ai.js', script: '/* */', refreshIntervalSec: 45 });
+  assert.deepEqual(summary.extraChecks.map((check) => [check.id, check.verdict]), [['SAFE_FRAME', 'UNKNOWN'], ['SLOT_REFRESH', 'UNKNOWN']]);
+  assert.match(summary.extraChecks[1].title, /45 s/);
 });

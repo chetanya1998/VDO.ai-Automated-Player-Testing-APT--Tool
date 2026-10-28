@@ -1621,3 +1621,19 @@ a.btn {
 .summary-section { min-width: 0; }
 
 .deep-shots h5 { margin: 0 0 6px; font-size: 12.5px; }
+
+/* Additional checks (safe frame, ad slot refresh) inside a URL card, kept apart from the 23 cases */
+.extra-block {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+}
+.extra-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.extra-check { display: grid; gap: 10px; align-content: start; padding: 12px 14px; border-left: 3px solid var(--tone, var(--border-strong)); border-radius: 8px; background: rgb(127 127 127 / 0.05); min-width: 0; }
+.extra-summary { margin: 0; font-weight: 600; font-size: 13.5px; line-height: 1.5; }
+.extra-check .facts { font-size: 12.5px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.extra-check .facts dd { overflow-wrap: anywhere; }
+.facts-row { display: contents; }

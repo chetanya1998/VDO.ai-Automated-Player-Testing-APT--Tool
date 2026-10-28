@@ -33,7 +33,7 @@ async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null }, run) {
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
@@ -63,6 +63,7 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
     failCount: run.failCount,
     errorCount: run.errorCount,
     ...(deep ? { deep: true, deepSummary: summarizeDeepRun(results) } : {}),
+    ...(refreshIntervalSec ? { refreshIntervalSec } : {}),
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     results,

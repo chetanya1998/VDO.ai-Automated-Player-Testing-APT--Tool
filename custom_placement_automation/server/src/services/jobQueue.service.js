@@ -42,6 +42,7 @@ function toPublicJob(job) {
     devices: input.devices,
     scroll: input.scroll,
     deep: input.deep === true,
+    refreshIntervalSec: input.refreshIntervalSec ?? null,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
 }
@@ -72,8 +73,8 @@ async function processJob(job) {
           },
         });
 
-        // Deep test: after the unchanged placement check, run all 23 cases for each URL.
-        if (input.deep) {
+        // Deep test and/or refresh check: after the unchanged placement check, one extra browser visit per URL.
+        if (input.deep || input.refreshIntervalSec) {
           for (const result of run.results) {
             if (stopping) throw new Error('Execution interrupted by server shutdown');
             const deep = await runDeepCheck({
@@ -84,10 +85,16 @@ async function processJob(job) {
               type: input.type,
               script,
               scroll: input.scroll,
+              refreshIntervalSec: input.refreshIntervalSec ?? null,
             });
-            result.deep = deep.summary;
-            // Saved as files with the run, like the placement screenshots.
-            result.deepScreenshots = deep.screenshots;
+            const { extraChecks = [], ...summary } = deep.summary;
+            // The safe frame check belongs to the deep test; the refresh check is its own option.
+            result.extraChecks = extraChecks.filter((check) => input.deep || check.id === 'SLOT_REFRESH');
+            if (input.deep) {
+              result.deep = summary;
+              // Saved as files with the run, like the placement screenshots.
+              result.deepScreenshots = deep.screenshots;
+            }
             job.progress.done += 1;
             await getDatabase().saveJob(job);
           }
@@ -132,7 +139,7 @@ export async function enqueueJob(input) {
     id: crypto.randomUUID(),
     input: storedInput,
     status: JOB_STATUS.QUEUED,
-    progress: { done: 0, total: input.urls.length * input.devices.length * (input.deep ? 2 : 1) },
+    progress: { done: 0, total: input.urls.length * input.devices.length * (input.deep || input.refreshIntervalSec ? 2 : 1) },
     runs: [],
     error: null,
     createdAt: new Date().toISOString(),

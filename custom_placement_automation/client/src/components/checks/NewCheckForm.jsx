@@ -31,6 +31,8 @@ const TYPE_CARDS = [
 const capitalize = (word) => word[0].toUpperCase() + word.slice(1);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+const REFRESH_OPTIONS = [30, 45, 60].map((value) => ({ value, label: `${value} s` }));
+
 function FormSection({ step, title, hint, className = '', children }) {
   return (
     <section className={`form-section form-block ${className}`.trim()}>
@@ -67,6 +69,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const [urlTimeoutMs, setUrlTimeoutMs] = useState(null);
   const [deepUrlTimeoutMs, setDeepUrlTimeoutMs] = useState(null);
   const [deep, setDeep] = useState(prefill?.deep ?? false);
+  const [refreshIntervalSec, setRefreshIntervalSec] = useState(prefill?.refreshIntervalSec ?? null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -107,7 +110,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
     if (urls.length === 0) return setError('Add at least one URL.');
     if (pasting && !codeText.trim()) return setError(`Paste the ${type} code to test.`);
     if (!pasting && !codeFile && !storedCode) return setError(`Choose the ${type} file to test.`);
-    if (deep && deepEngine && !deepEngine.available) return setError(deepEngine.message);
+    if ((deep || refreshIntervalSec) && deepEngine && !deepEngine.available) return setError(deepEngine.message);
 
     setSubmitting(true);
     try {
@@ -119,6 +122,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
         devices,
         urls,
         deep,
+        refreshIntervalSec,
         script: pasting ? codeText : codeFile ? await codeFile.text() : undefined,
         scriptId: useStored ? storedCode.id : undefined,
         scriptName: pasting ? type : (codeFile?.name ?? storedCode?.name),
@@ -144,6 +148,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
     devices.length ? devices.map(capitalize).join(' + ') : 'No device',
     plural(urls.length, 'URL'),
     ...(deep ? ['Deep test · 23 cases'] : []),
+    ...(refreshIntervalSec ? [`Refresh check · ${refreshIntervalSec} s`] : []),
   ];
   const deepUnavailable = deepEngine !== null && !deepEngine.available;
   const deepSeconds = deepUrlTimeoutMs ? Math.round(deepUrlTimeoutMs / 1000) : 90;
@@ -353,6 +358,30 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             }
           />
           {deepUnavailable && <Alert tone="warning">{deepEngine.message}</Alert>}
+        </FormSection>
+
+        <FormSection step="5" title="Ad slot refresh check" hint="Optional, separate from the deep test." className={refreshIntervalSec ? 'form-block-deep' : ''}>
+          <Toggle
+            id="refresh-check"
+            checked={refreshIntervalSec !== null}
+            onChange={(on) => setRefreshIntervalSec(on ? 30 : null)}
+            disabled={busy || deepUnavailable}
+            label="Check that the ad slot refreshes"
+            description={
+              refreshIntervalSec
+                ? `After loading, the player is kept in view and the tool watches for a new ad request every ${refreshIntervalSec} s (on time = ${refreshIntervalSec - 5}–${refreshIntervalSec + 15} s). Adds about ${refreshIntervalSec + 20} s per URL and device.`
+                : 'Off. Turn on to check that the player asks for a new ad at the publisher\'s refresh interval.'
+            }
+          />
+          {refreshIntervalSec !== null && (
+            <Segmented
+              label="Refresh interval"
+              options={REFRESH_OPTIONS}
+              value={refreshIntervalSec}
+              onChange={setRefreshIntervalSec}
+              disabled={busy}
+            />
+          )}
         </FormSection>
         </div>
 

@@ -40,6 +40,21 @@ export interface DeepBrowserRunOptions {
   allowPrivateNetwork?: boolean;
   // When set, take screenshots aimed at the first element matching playerSelector (in any frame).
   screenshots?: { playerSelector: string; settleMs?: number };
+  // When set, sample Google SafeFrame ad iframes and note whether each sits inside the player.
+  safeFrames?: { playerSelector: string };
+  // When set, after the normal observation keep the player in view this long to watch for an ad slot refresh.
+  refreshWatch?: { playerSelector: string; watchMs: number };
+}
+
+export interface SafeFrameSample {
+  atMs: number;
+  url: string;
+  width: number;
+  height: number;
+  visible: boolean;
+  inViewport: boolean;
+  inPlayer: boolean;
+  crossOrigin: boolean;
 }
 
 export interface DeepScreenshot {
@@ -70,6 +85,9 @@ export interface DeepBrowserRunResult {
   blockedRequestCount: number;
   screenshots: DeepScreenshot[];
   screenshotNotes: string[];
+  safeFrames?: { loaded: Array<{ atMs: number; url: string }>; samples: SafeFrameSample[] };
+  // Elapsed milliseconds when the refresh watch started and ended (player kept in view in between).
+  refreshWindow?: { startMs: number; endMs: number } | null;
   resourcesClosed: { context: boolean; browser: boolean };
 }
 
@@ -206,6 +224,62 @@ async function capturePlayerScreenshots(page: Page, options: NonNullable<DeepBro
   await screenshot(page, "Scrolled past player (floating, deep test)", shots, notes);
 }
 
+// Google serves SafeFrame ads from <hash>.safeframe.googlesyndication.com (or a /safeframe/ path on its ad hosts).
+export function isSafeFrameUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return host === "safeframe.googlesyndication.com" || host.endsWith(".safeframe.googlesyndication.com")
+      || (/(^|\.)(googlesyndication|doubleclick)\.(com|net)$/.test(host) && url.pathname.includes("/safeframe/"));
+  } catch {
+    return false;
+  }
+}
+
+async function sampleSafeFrames(page: Page, playerSelector: string, atMs: number, samples: SafeFrameSample[]): Promise<void> {
+  const main = page.mainFrame();
+  const pageOrigin = (() => { try { return new URL(page.url()).origin; } catch { return ""; } })();
+  for (const frame of page.frames()) {
+    if (frame === main || frame.isDetached() || !isSafeFrameUrl(frame.url())) continue;
+    try {
+      const element = await frame.frameElement();
+      const box = await element.boundingBox();
+      const visible = box !== null && await element.evaluate((node) => {
+        const style = getComputedStyle(node as Element);
+        return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+      });
+      // Walk up through nested frames until the player wrapper is found or the top page is reached.
+      let inPlayer = false;
+      let current = frame;
+      let currentElement = element;
+      for (let depth = 0; depth < 6; depth += 1) {
+        if (await currentElement.evaluate((node, selector) => (node as Element).closest(selector) !== null, playerSelector).catch(() => false)) { inPlayer = true; break; }
+        const parent = current.parentFrame();
+        if (parent === null || parent === main) break;
+        currentElement = await parent.frameElement();
+        current = parent;
+      }
+      const viewport = page.viewportSize();
+      const inViewport = box !== null && viewport !== null && box.width > 0 && box.height > 0
+        && box.x < viewport.width && box.y < viewport.height && box.x + box.width > 0 && box.y + box.height > 0;
+      let crossOrigin = true;
+      try { crossOrigin = new URL(frame.url()).origin !== pageOrigin; } catch { /* keep true */ }
+      samples.push({ atMs, url: frame.url().split("?")[0]!.split("#")[0]!, width: Math.round(box?.width ?? 0), height: Math.round(box?.height ?? 0), visible, inViewport, inPlayer, crossOrigin });
+    } catch {
+      // A frame that navigates away while it is measured is sampled again next time.
+    }
+  }
+}
+
+async function scrollPlayerIntoView(page: Page, playerSelector: string): Promise<boolean> {
+  for (const frame of [page.mainFrame(), ...page.frames().filter((item) => item !== page.mainFrame() && !item.isDetached())]) {
+    const candidate = frame.locator(playerSelector).first();
+    if (await candidate.count().catch(() => 0) === 0) continue;
+    return candidate.evaluate((element) => { element.scrollIntoView({ block: "center", behavior: "instant" }); return true; }).catch(() => false);
+  }
+  return false;
+}
+
 async function scrollStep(page: Page, ratio: number): Promise<void> {
   await page.evaluate((value) => window.scrollBy({ top: Math.round(window.innerHeight * value), behavior: "instant" }), ratio);
 }
@@ -240,6 +314,10 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
     let blockedRequestCount = 0;
     const screenshots: DeepScreenshot[] = [];
     const screenshotNotes: string[] = [];
+    const safeFramesLoaded: Array<{ atMs: number; url: string }> = [];
+    const safeFrameSamples: SafeFrameSample[] = [];
+    let refreshWindow: { startMs: number; endMs: number } | null = null;
+    const SAFE_FRAME_SAMPLE_MS = 5_000;
 
     try {
       browser = await dependencies.launch({
@@ -285,6 +363,11 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
       page = await context.newPage();
       page.on("console", (message) => observations.push({ kind: "console", atMs: elapsed(started), detail: `${message.type()}: ${message.text()}` }));
       page.on("pageerror", (error) => observations.push({ kind: "page_error", atMs: elapsed(started), detail: error.message }));
+      if (options.safeFrames !== undefined) {
+        page.on("framenavigated", (frame) => {
+          if (isSafeFrameUrl(frame.url())) safeFramesLoaded.push({ atMs: elapsed(started), url: frame.url().split("?")[0]!.split("#")[0]! });
+        });
+      }
       capture.attach(page);
 
       const activePage = page;
@@ -297,6 +380,14 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
         let observedMs = 0;
         let sinceScrollMs = 0;
         let scrollSteps = 0;
+        let sinceFrameSampleMs = 0;
+        const sampleFrames = async (stepMs: number) => {
+          if (options.safeFrames === undefined) return;
+          sinceFrameSampleMs += stepMs;
+          if (sinceFrameSampleMs < SAFE_FRAME_SAMPLE_MS) return;
+          sinceFrameSampleMs = 0;
+          await sampleSafeFrames(activePage, options.safeFrames.playerSelector, elapsed(started), safeFrameSamples);
+        };
         while (observedMs < options.observeAfterLoadMs) {
           const step = Math.min(options.visibilitySampleIntervalMs, options.observeAfterLoadMs - observedMs);
           await activePage.waitForTimeout(step);
@@ -308,7 +399,23 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
             await scrollStep(activePage, options.scroll.stepViewportRatio);
           }
           await capture.captureVisibility(activePage, "interval");
+          await sampleFrames(step);
         }
+        // Optional refresh watch: the slot normally refreshes only while the player is in view.
+        if (options.refreshWatch !== undefined) {
+          await scrollPlayerIntoView(activePage, options.refreshWatch.playerSelector);
+          const startMs = elapsed(started);
+          let watchedMs = 0;
+          while (watchedMs < options.refreshWatch.watchMs) {
+            const step = Math.min(1_000, options.refreshWatch.watchMs - watchedMs);
+            await activePage.waitForTimeout(step);
+            watchedMs += step;
+            await capture.captureVisibility(activePage, "interval");
+            await sampleFrames(step);
+          }
+          refreshWindow = { startMs, endMs: elapsed(started) };
+        }
+        if (options.safeFrames !== undefined) await sampleSafeFrames(activePage, options.safeFrames.playerSelector, elapsed(started), safeFrameSamples);
         await capture.capturePage(activePage);
         if (options.screenshots !== undefined) await capturePlayerScreenshots(activePage, options.screenshots, screenshots, screenshotNotes);
         await activePage.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
@@ -392,6 +499,8 @@ export function createDeepBrowserRunner(dependencies: DeepBrowserRunnerDependenc
       blockedRequestCount,
       screenshots,
       screenshotNotes,
+      ...(options.safeFrames === undefined ? {} : { safeFrames: { loaded: safeFramesLoaded, samples: safeFrameSamples } }),
+      refreshWindow,
       resourcesClosed: { context: contextClosed, browser: browserClosed },
     };
   };

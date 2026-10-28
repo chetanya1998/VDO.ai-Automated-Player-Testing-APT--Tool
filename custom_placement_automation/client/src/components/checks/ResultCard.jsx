@@ -2,6 +2,8 @@ import { Badge } from '../ui';
 import ScreenshotGallery from './ScreenshotGallery.jsx';
 import DiagnosticsPanel from './DiagnosticsPanel.jsx';
 import DeepResults from './DeepResults.jsx';
+import ExtraChecks from './ExtraChecks.jsx';
+import { verdictLabel, verdictTone } from '../../utils/verdicts.js';
 import { formatBox, formatDuration } from '../../utils/format.js';
 import { reasonLabel } from '../../utils/reasons.js';
 import { CHECK_TYPE } from '../../utils/checkTypes.js';
@@ -24,6 +26,9 @@ export default function ResultCard({ result, index, type }) {
       <header className="result-header">
         <Badge tone={status}>Placement: {status.toUpperCase()}</Badge>
         {result.deep && <Badge tone={`deep-${result.deep.overallVerdict === 'PASS' ? 'pass' : result.deep.overallVerdict === 'FAIL' ? 'fail' : 'mixed'}`}>Deep test: {result.deep.verdictCounts?.PASS ?? 0} of 23 passed</Badge>}
+        {(result.extraChecks ?? []).map((check) => (
+          <Badge key={check.id} tone={verdictTone(check.verdict)}>{check.id === 'SAFE_FRAME' ? 'Safe frame' : 'Refresh'}: {verdictLabel(check.verdict)}</Badge>
+        ))}
         <span className="muted">#{index + 1}</span>
         <a className="result-url" href={result.url} target="_blank" rel="noreferrer">
           {result.url}
@@ -76,6 +81,7 @@ export default function ResultCard({ result, index, type }) {
       </div>
 
       <DeepResults deep={result.deep} />
+      <ExtraChecks checks={result.extraChecks} />
     </article>
   );
 }

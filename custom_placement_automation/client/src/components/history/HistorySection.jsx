@@ -32,7 +32,12 @@ const BASE_COLUMNS = [
   {
     key: 'type',
     header: 'Check type',
-    render: (run) => (run.type === CHECK_TYPE.CSS ? 'CSS check' : 'Custom placement'),
+    render: (run) => (
+      <span className="domain-cell">
+        {run.type === CHECK_TYPE.CSS ? 'CSS check' : 'Custom placement'}
+        {run.refreshIntervalSec && <small>+ refresh check · {run.refreshIntervalSec} s</small>}
+      </span>
+    ),
   },
   {
     key: 'domain',
@@ -86,6 +91,7 @@ const toRerunSettings = (run) => ({
   scroll: run.scroll ?? null,
   script: run.script ?? null,
   deep: run.deep === true,
+  refreshIntervalSec: run.refreshIntervalSec ?? null,
   startedAt: run.startedAt,
 });
 
