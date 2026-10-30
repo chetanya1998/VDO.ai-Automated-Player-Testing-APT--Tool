@@ -33,7 +33,8 @@ async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false, allowOtherDomains = false, offDomainUrls = [] }, run) {
+  const offDomain = new Set(offDomainUrls);
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
@@ -47,7 +48,7 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
         screenshotLabels: deepScreenshots.map((shot) => shot.label),
         screenshotArtifacts: deepArtifacts,
       };
-      return { ...result, ...(deep ? { deep } : {}), id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
+      return { ...result, ...(deep ? { deep } : {}), ...(offDomain.has(result.url) ? { offDomain: true } : {}), id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
     }),
   );
 
@@ -64,6 +65,8 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
     errorCount: run.errorCount,
     ...(deep ? { deep: true, deepSummary: summarizeDeepRun(results) } : {}),
     ...(refreshIntervalSec ? { refreshIntervalSec } : {}),
+    // Staging / preview URLs on another host than the publisher domain, allowed by the user for this run.
+    ...(allowOtherDomains ? { allowOtherDomains: true, offDomainUrls: [...offDomain] } : {}),
     // Sticky runs keep their 25-check counts per URL for History, never summed across URLs.
     ...(stickyCode ? {
       stickyCode,

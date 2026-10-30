@@ -1651,3 +1651,7 @@ details.deep-shots > summary { cursor: pointer; font-weight: 600; font-size: 13p
   .sticky-detail-body { grid-template-columns: 1fr; }
 }
 .app-version { text-align: center; padding: 8px 16px 24px; }
+
+/* URLs on another host than the publisher domain (staging / preview) */
+.form-note-warn { color: var(--warn); }
+.text-warn { color: var(--warn); }

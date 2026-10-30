@@ -49,6 +49,20 @@ export async function closePdfBrowser() {
   await browser?.close();
 }
 
+// Staging / preview URLs: hosts outside the publisher domain, allowed for this run.
+const otherDomainsText = (run) => {
+  const hosts = [...new Set((run.offDomainUrls ?? []).map((value) => { try { return new URL(value).hostname; } catch { return value; } }))];
+  return hosts.length
+    ? `Allowed (staging / preview): ${run.offDomainUrls.length} URL${run.offDomainUrls.length === 1 ? '' : 's'} on ${hosts.join(', ')}; the publisher domain ${run.domain} is still used for tag checks`
+    : 'Allowed, but every URL was on the publisher domain';
+};
+const offDomainBadge = (run, result) => {
+  if (!result.offDomain) return '';
+  let host = '';
+  try { host = new URL(result.url).hostname; } catch { /* keep empty */ }
+  return `<span class="badge warn">Staging / preview URL${host ? `: ${escapeHtml(host)}` : ''}</span>`;
+};
+
 const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -224,6 +238,7 @@ function renderStickyResult(run, result, index, images) {
     <header>
       <span class="badge ${result.status}">Sticky: ${result.status.toUpperCase()}</span>
       ${sticky ? `<span class="badge ${VERDICT_CLASS[sticky.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(stickyOverall(sticky))}</span><span class="badge unknown">${sticky.verdictCounts.PASS} pass · ${sticky.verdictCounts.FAIL} fail · ${sticky.verdictCounts.WARNING} warning</span>` : ''}
+      ${offDomainBadge(run, result)}
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
@@ -255,6 +270,7 @@ function renderResult(run, result, index, images, deepImages) {
   <section class="result ${result.status}${hasMore ? ' has-deep' : ''}">
     <header>
       <span class="badge ${result.status}">Placement: ${result.status.toUpperCase()}</span>
+      ${offDomainBadge(run, result)}
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
@@ -295,6 +311,7 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
     ['Started', formatDateTime(run.startedAt)],
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
+    ...(run.allowOtherDomains ? [['URLs on other domains', otherDomainsText(run)]] : []),
     ...(run.type === 'sticky' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
     ...(run.type === 'sticky'
       ? [

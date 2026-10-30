@@ -54,6 +54,7 @@ const BASE_COLUMNS = [
       <span className="domain-cell">
         {run.domain}
         <small>{run.tag}</small>
+        {run.offDomainUrls?.length > 0 && <small className="text-warn">+ staging / preview URLs</small>}
       </span>
     ),
   },
@@ -103,6 +104,7 @@ const toRerunSettings = (run) => ({
   refreshIntervalSec: run.refreshIntervalSec ?? null,
   stickyCode: run.stickyCode ?? 'none',
   stickyAdditional: run.stickyAdditional === true,
+  allowOtherDomains: run.allowOtherDomains === true,
   startedAt: run.startedAt,
 });
 

@@ -18,6 +18,7 @@ export default function RunResults({ run }) {
         <Badge tone="neutral">{checkTypeLabel(run.type)}</Badge>
         {run.deep && <Badge tone="accent">Deep test</Badge>}
         {run.refreshIntervalSec && <Badge tone="accent">Refresh check · {run.refreshIntervalSec} s</Badge>}
+        {run.offDomainUrls?.length > 0 && <Badge tone="warn">Staging / preview URLs</Badge>}
         {sticky && <Badge tone="accent">{run.stickyCode && run.stickyCode !== 'none' ? `With ${run.stickyCode}` : 'Live tag'}</Badge>}
         <strong>{run.tag}</strong>
         <span className="muted">

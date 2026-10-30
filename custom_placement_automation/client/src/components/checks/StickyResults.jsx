@@ -21,6 +21,8 @@ function stickyOverall(sticky) {
   return { label: 'Could not be judged', tone: 'warn' };
 }
 
+const hostOf = (value) => { try { return new URL(value).hostname; } catch { return value; } };
+
 function CheckDetail({ item, evidence, onClose }) {
   return (
     <div className={`case-detail tone-${verdictTone(item.verdict)}`} role="region" aria-label={`${item.id} explanation`}>
@@ -84,6 +86,7 @@ export default function StickyResults({ result, index }) {
       <header className="result-header">
         <Badge tone={result.status}>Sticky: {result.status.toUpperCase()}</Badge>
         {overall && <Badge tone={overall.tone}>Overall {overall.label}</Badge>}
+        {result.offDomain && <Badge tone="warn">Staging / preview: {hostOf(result.url)}</Badge>}
         <span className="muted">#{index + 1}</span>
         <a className="result-url" href={result.url} target="_blank" rel="noreferrer">{result.url}</a>
       </header>

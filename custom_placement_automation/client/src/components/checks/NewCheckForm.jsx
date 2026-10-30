@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Alert, Button, FileInput, Input, Segmented, TextArea, Toggle } from '../ui';
+import { Alert, Button, Checkbox, FileInput, Input, Segmented, TextArea, Toggle } from '../ui';
 import { ArrowRightIcon } from '../ui/icons.jsx';
 import { startPlacementCheck } from '../../api/placementChecks.js';
 import { getSettings } from '../../api/settings.js';
 import PlacementEventHelp from './PlacementEventHelp.jsx';
 import { CHECK_TYPE } from '../../utils/checkTypes.js';
+import { normalizeDomain, offDomainUrls } from '../../utils/domains.js';
 
 const DEVICES = ['desktop', 'mobile'];
 const SOURCE_OPTIONS = [
@@ -80,10 +81,15 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const [refreshIntervalSec, setRefreshIntervalSec] = useState(prefill?.refreshIntervalSec ?? null);
   const [stickyCode, setStickyCode] = useState(prefill?.stickyCode ?? 'none');
   const [stickyAdditional, setStickyAdditional] = useState(prefill?.stickyAdditional ?? false);
+  const [allowOtherDomains, setAllowOtherDomains] = useState(prefill?.allowOtherDomains ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const urls = parseUrls(urlsText);
+  // URLs whose host is not the publisher domain (staging / preview copies), named while you type.
+  const publisherDomain = normalizeDomain(domain);
+  const offDomain = publisherDomain ? offDomainUrls(publisherDomain, urls) : [];
+  const offDomainHosts = [...new Set(offDomain.map((value) => { try { return new URL(value).hostname; } catch { return value; } }))];
   const sticky = type === CHECK_TYPE.STICKY;
   // The code file this check applies: vdo.ai.js, style.css, or none (sticky checker on the live tag).
   const codeKind = sticky ? stickyCode : type;
@@ -122,6 +128,9 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
     const pasting = source === 'paste';
     if (devices.length === 0) return setError('Pick at least one device.');
     if (urls.length === 0) return setError('Add at least one URL.');
+    if (offDomain.length > 0 && !allowOtherDomains) {
+      return setError(`${offDomainHosts.join(', ')} ${offDomainHosts.length === 1 ? 'is' : 'are'} not on ${publisherDomain}. Tick "Allow URLs on other domains (staging / preview)" to test ${offDomain.length === 1 ? 'it' : 'them'} anyway.`);
+    }
     const needsCode = codeKind !== 'none';
     if (needsCode && pasting && !codeText.trim()) return setError(`Paste the ${codeKind} code to test.`);
     if (needsCode && !pasting && !codeFile && !storedCode) return setError(`Choose the ${codeKind} file to test.`);
@@ -138,6 +147,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
         urls,
         // The deep test and refresh check belong to the placement checks, not the sticky checker.
         deep: sticky ? false : deep,
+        allowOtherDomains,
         refreshIntervalSec: sticky ? null : refreshIntervalSec,
         ...(sticky ? { stickyCode, stickyAdditional } : {}),
         script: !needsCode ? undefined : pasting ? codeText : codeFile ? await codeFile.text() : undefined,
@@ -329,6 +339,21 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
               disabled={busy}
             />
           </div>
+
+          <Checkbox
+            id="allow-other-domains"
+            label="Allow URLs on other domains (staging / preview)"
+            checked={allowOtherDomains}
+            onChange={(e) => setAllowOtherDomains(e.target.checked)}
+            disabled={busy}
+          />
+          {offDomain.length > 0 && (
+            <p className={`form-note ${allowOtherDomains ? '' : 'form-note-warn'}`.trim()}>
+              {allowOtherDomains
+                ? `${plural(offDomain.length, 'URL')} on ${offDomainHosts.join(', ')} will be tested as staging / preview. Keep the publisher's own domain above (${publisherDomain}); the tag checks still use it, and the report marks these URLs.`
+                : `${plural(offDomain.length, 'URL')} ${offDomain.length === 1 ? 'is' : 'are'} not on ${publisherDomain}: ${offDomainHosts.join(', ')}. Tick the box above to test staging or preview copies, or fix the domain.`}
+            </p>
+          )}
         </FormSection>
 
         <FormSection step="3" title="Run settings" hint={sticky ? 'Devices to emulate. The sticky checker scrolls each page by its own plan.' : 'Devices to emulate and how the page is scrolled to trigger lazy loading.'}>

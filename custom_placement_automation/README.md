@@ -147,6 +147,16 @@ Like the placement checks, it can first apply a `vdo.ai.js` or `style.css` (**Co
 
 **Note:** these are internal preventative QA checks, not official Google violation triggers. A failure needs investigation, and a pass does not guarantee policy compliance.
 
+### Staging and preview URLs on another domain
+
+Every URL must be on the publisher **domain** or one of its subdomains: `www.`, `m.` and so on are fine. Otherwise the form names the host and the check does not start. For staging or preview copies on another host, tick **Allow URLs on other domains (staging / preview)** under the URLs.
+
+- Keep the **publisher's own domain** in the Domain field, e.g. `thehindubusinessline.com` for `https://devbl.thehindu.co.in/…`. The deep test's tag-to-domain check (TC-18) keeps judging the tag against that domain.
+- Don't type the staging domain instead: TC-18 would then fail wrongly.
+- These URLs are marked **Staging / preview: host** on their result, in the run header, in History and in the PDF ("URLs on other domains").
+- Google Ad Manager preview links (`?google_preview=…`) work. They show one specific creative and expire after a while.
+- If the staging site is only reachable inside a private network, the deep test also needs `DEEP_ALLOW_PRIVATE_NETWORK=true` in `server/.env`.
+
 ### History
 
 - Every run is saved locally and listed in **History**.

@@ -114,4 +114,5 @@ Each run on a live site sends **real** logger events, analytics hits and ad requ
 | `Port 3000 is already in use` | Another copy is running; close its window |
 | `Another placement server already owns this database schema` | Another copy is still running; close it |
 | MP4 video box amber | Install Google Chrome, or set `CHROME_PATH` in `server\.env` to `chrome.exe`, then restart |
+| `… is not on <domain>. Tick "Allow URLs on other domains"` | The URL is a staging / preview copy on another host. Keep the publisher's domain in the Domain field and tick **Allow URLs on other domains (staging / preview)** |
 | A URL shows **Page blocked** | The site refused the automated browser (bot protection); the result shows the HTTP status and what the site showed. Try Desktop, wait a few minutes, or try another URL |

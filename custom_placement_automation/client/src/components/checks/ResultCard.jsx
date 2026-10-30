@@ -8,6 +8,8 @@ import { formatBox, formatDuration } from '../../utils/format.js';
 import { reasonLabel } from '../../utils/reasons.js';
 import { CHECK_TYPE } from '../../utils/checkTypes.js';
 
+const hostOf = (value) => { try { return new URL(value).hostname; } catch { return value; } };
+
 function describeEvent({ status, reasons, eventDetail }, type) {
   if (type === CHECK_TYPE.CSS) return 'not checked (CSS check)';
   if (status === 'error' || reasons.includes('no_event_emitted')) return 'not received';
@@ -29,6 +31,7 @@ export default function ResultCard({ result, index, type }) {
         {(result.extraChecks ?? []).map((check) => (
           <Badge key={check.id} tone={verdictTone(check.verdict)}>{check.id === 'SAFE_FRAME' ? 'Safe frame' : 'Refresh'}: {verdictLabel(check.verdict)}</Badge>
         ))}
+        {result.offDomain && <Badge tone="warn">Staging / preview: {hostOf(result.url)}</Badge>}
         <span className="muted">#{index + 1}</span>
         <a className="result-url" href={result.url} target="_blank" rel="noreferrer">
           {result.url}

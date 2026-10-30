@@ -46,6 +46,7 @@ function toPublicJob(job) {
     refreshIntervalSec: input.refreshIntervalSec ?? null,
     stickyCode: input.stickyCode ?? null,
     stickyAdditional: input.stickyAdditional === true,
+    allowOtherDomains: input.allowOtherDomains === true,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
 }

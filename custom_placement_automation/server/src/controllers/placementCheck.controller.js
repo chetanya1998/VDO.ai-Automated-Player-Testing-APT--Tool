@@ -10,10 +10,7 @@ import { httpError } from '../utils/httpError.js';
 const TAG_PATTERN = /^[\w-]+$/;
 const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
 
-const normalizeHost = (host) => host.toLowerCase().replace(/^www\./, '');
-
-const normalizeDomain = (value) =>
-  normalizeHost(String(value).trim().replace(/^https?:\/\//i, '').split('/')[0]);
+import { normalizeDomain, offDomainUrls } from '../utils/domains.js';
 
 function parseScrollValue(value, name, label, unit = '') {
   const { min, max } = config.placement.scrollLimits[name];
@@ -62,9 +59,16 @@ function parseCheckInput(body = {}) {
     }
     if (!/^https?:$/.test(url.protocol)) throw httpError(400, `URL must start with http(s): ${value}`);
     if (url.username || url.password) throw httpError(400, 'URLs must not contain credentials');
-    if (normalizeHost(url.hostname) !== domain && !normalizeHost(url.hostname).endsWith(`.${domain}`)) {
-      throw httpError(400, 'Every URL must belong to the supplied publisher domain');
-    }
+  }
+
+  // URLs on another host (staging, preview) are refused unless the user allows them; the domain field still
+  // names the publisher, so tag-to-domain checks keep judging against the real site.
+  if (body.allowOtherDomains !== undefined && typeof body.allowOtherDomains !== 'boolean') throw httpError(400, '`allowOtherDomains` must be true or false');
+  const allowOtherDomains = body.allowOtherDomains === true;
+  const offDomain = offDomainUrls(domain, urls);
+  if (offDomain.length > 0 && !allowOtherDomains) {
+    const hosts = [...new Set(offDomain.map((value) => new URL(value).hostname))];
+    throw httpError(400, `${offDomain.length === 1 ? 'This URL is' : `${offDomain.length} URLs are`} not on ${domain}: ${hosts.join(', ')}. Tick "Allow URLs on other domains (staging / preview)" to test ${offDomain.length === 1 ? 'it' : 'them'} anyway.`);
   }
 
   if (body.deep !== undefined && typeof body.deep !== 'boolean') throw httpError(400, '`deep` must be true or false');
@@ -88,7 +92,7 @@ function parseCheckInput(body = {}) {
   const scroll = parseScroll(body.scroll);
   const codeType = type === STICKY_TYPE ? stickyCode : type;
   const scriptName = codeType === 'none' ? null : String(body.scriptName ?? codeType).slice(0, 200);
-  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType };
+  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType, allowOtherDomains, offDomainUrls: offDomain };
 }
 
 async function resolveScript(body, type) {
