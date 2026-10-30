@@ -76,7 +76,11 @@ function parseCheckInput(body = {}) {
   }
   // The sticky violation checker runs its own scenario; it can optionally apply a vdo.ai.js or style.css first.
   let stickyCode = null;
+  let stickyAdditional = false;
   if (type === STICKY_TYPE) {
+    // ST-01..ST-13 always run; ST-14..ST-25 only when asked for.
+    if (body.stickyAdditional !== undefined && typeof body.stickyAdditional !== 'boolean') throw httpError(400, '`stickyAdditional` must be true or false');
+    stickyAdditional = body.stickyAdditional === true;
     if (deep || refreshIntervalSec) throw httpError(400, 'The deep test and refresh check are not available with the sticky violation checker');
     stickyCode = body.stickyCode ?? 'none';
     if (!STICKY_CODE.includes(stickyCode)) throw httpError(400, `\`stickyCode\` must be one of: ${STICKY_CODE.join(', ')}`);
@@ -84,7 +88,7 @@ function parseCheckInput(body = {}) {
   const scroll = parseScroll(body.scroll);
   const codeType = type === STICKY_TYPE ? stickyCode : type;
   const scriptName = codeType === 'none' ? null : String(body.scriptName ?? codeType).slice(0, 200);
-  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, codeType };
+  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType };
 }
 
 async function resolveScript(body, type) {

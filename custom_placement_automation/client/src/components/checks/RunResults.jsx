@@ -32,12 +32,12 @@ export default function RunResults({ run }) {
       {/* Placement counts URLs; the deep test counts 23 test cases per URL. Kept apart so they are never added together. */}
       <section className="summary-section">
         <header className="summary-section-head">
-          <h4>{sticky ? 'Sticky violation check · 25 checks per URL' : 'Custom placement check'}</h4>
-          <p>{sticky ? 'Counts URLs. A URL fails when any of its 25 checks fails; warnings need a look but do not fail it.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
+          <h4>{sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : 'Custom placement check'}</h4>
+          <p>{sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings are left out): 80% or more = Pass, 50% to under 80% = Pass · Review required, under 50% = Fail.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
         </header>
         <div className="stat-tiles">
           <div className="stat-tile"><b>{total}</b><span>URLs checked</span></div>
-          <div className="stat-tile tone-pass"><b>{run.passCount}</b><span>URLs passed</span></div>
+          <div className="stat-tile tone-pass"><b>{run.passCount}</b><span>URLs passed{sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}</span></div>
           <div className="stat-tile tone-fail"><b>{run.failCount}</b><span>URLs failed</span></div>
           <div className="stat-tile tone-error"><b>{run.errorCount}</b><span>URLs with errors</span></div>
         </div>

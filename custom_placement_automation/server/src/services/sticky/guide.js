@@ -1,5 +1,5 @@
 // The 25 checks from "Sticky Violation Test Cases – Chromium", in plain words.
-// group: core = ST-01..ST-12 (must test), additional = ST-13..ST-25 (optional but recommended).
+// group: core = ST-01..ST-13 (always run), additional = ST-14..ST-25 (run only when the user opts in).
 export const STICKY_CASES = [
   { id: 'ST-01', group: 'core', title: 'Unnecessary margins or blank space', checks: 'Whether the page or the player adds margins, padding or blank space when the player starts floating, without anything to make room for.', expected: 'No unnecessary margins or blank space are introduced when there is no actual overlap to resolve.' },
   { id: 'ST-02', group: 'core', title: 'Overlap with site header / navigation', checks: 'Whether the player is drawn over the site header or menu while it floats.', expected: 'The player does not cover the header or navigation.' },
@@ -13,7 +13,7 @@ export const STICKY_CASES = [
   { id: 'ST-10', group: 'core', title: 'Player or controls outside viewport', checks: 'Whether any part of the floating player or its close button is off the edge of the screen.', expected: 'The player stays within the visible viewport and required controls remain accessible.' },
   { id: 'ST-11', group: 'core', title: 'Overlap with another sticky ad or floating element', checks: 'Whether the player overlaps another sticky ad or fixed element on the page (or is covered by one).', expected: "The VDO player does not improperly cover the other ad's controls or create obstructive overlap." },
   { id: 'ST-12', group: 'core', title: 'Duplicate floating players', checks: 'Whether more than one vdo.ai player floats at the same time.', expected: 'Only the intended player floats; duplicate instances do not overlap.' },
-  { id: 'ST-13', group: 'additional', title: 'Overlap with footer or bottom navigation', checks: 'At the bottom of the page, whether the player covers footer links or a fixed bottom menu.', expected: 'The player does not obstruct important footer or navigation controls.' },
+  { id: 'ST-13', group: 'core', title: 'Overlap with footer or bottom navigation', checks: 'At the bottom of the page, whether the player covers footer links or a fixed bottom menu.', expected: 'The player does not obstruct important footer or navigation controls.' },
   { id: 'ST-14', group: 'additional', title: 'Overlap with consent / notification banner', checks: 'Whether the player covers the buttons of a cookie, consent or notification banner.', expected: 'The player does not cover essential banner controls.' },
   { id: 'ST-15', group: 'additional', title: 'Controls clipped at different player sizes', checks: 'Whether the close and Skip Ad buttons stay fully visible at every screen size the tool tried.', expected: 'All applicable controls remain fully visible and usable.' },
   { id: 'ST-16', group: 'additional', title: 'Position while scrolling up and down', checks: 'Whether the floating player stays in the same place while the reader scrolls up and down several times.', expected: 'The player maintains the intended position without unexpected jumps or spacing changes.' },
@@ -28,10 +28,10 @@ export const STICKY_CASES = [
   { id: 'ST-25', group: 'additional', title: 'Page navigation and stale player state', checks: 'When the address changes inside the page (infinite scroll or single-page site), whether the player follows the new page instead of keeping its old position.', expected: "The player follows the current page's placement rules and does not retain stale positioning." },
 ];
 
+// Status criteria: PASS = observed result matches the expected result; FAIL = it does not (one confirmed failure
+// is enough); WARNING = inconclusive or blocked (scenario did not occur, prerequisite missing, config unknown).
 export const STICKY_MEANING = {
-  PASS: 'No problem was found for this check on this page.',
-  FAIL: 'A problem was found. The reason below says what and where; see the screenshots.',
-  WARNING: 'Something needs a look, but it may be intended. The reason below explains.',
-  UNKNOWN: 'The tool could not decide on this page. The reason below explains.',
-  NOT_APPLICABLE: 'This check does not apply to what happened on this page (for example the player never floated).',
+  PASS: 'The observed result matches the expected result. See the screenshot evidence.',
+  FAIL: 'The observed result does not match the expected result. The reason says what and where; see the screenshot evidence.',
+  WARNING: 'This could not be judged on this page (the situation did not occur, something it needs was missing, or the setting is unknown). It is not counted as a failure.',
 };

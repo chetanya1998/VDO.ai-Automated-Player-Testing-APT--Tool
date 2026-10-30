@@ -97,8 +97,17 @@ export function stickySnapshot({ tag }) {
     });
   };
 
-  const headers = collect('header, [role="banner"], nav, [role="navigation"], #header, #masthead, .site-header, .navbar, .header', (el) => el.getBoundingClientRect().width >= 100);
-  const headlines = collect('h1, .entry-title, .post-title, .article-title, [itemprop="headline"]', () => true, 4);
+  // The site header and main menu only: a header/nav near the top of the page or fixed to the top, not breadcrumbs,
+  // pagination, widget headers or an article's own <header> (that is the headline area, ST-03).
+  const nearTop = (el) => {
+    const r = el.getBoundingClientRect();
+    const position = styleOf(el).position;
+    return r.top + window.scrollY < 400 || ((position === 'fixed' || position === 'sticky') && r.top <= 2);
+  };
+  const headers = collect('header, [role="banner"], nav, [role="navigation"], #header, #masthead, .site-header, .navbar',
+    (el) => el.getBoundingClientRect().width >= 100 && nearTop(el) && !(el.tagName === 'HEADER' && el.closest('article, main') && !el.closest('.site-header, #masthead')) && !el.closest('article'));
+  // The article headline: h1 elements and schema.org headlines, not related-post titles that reuse .entry-title.
+  const headlines = collect('h1, [itemprop="headline"]', (el) => el.tagName === 'H1' || /^H[1-2]$/.test(el.tagName), 4);
   const footers = collect('footer, [role="contentinfo"], #footer, .site-footer', () => true, 4);
 
   // Fixed/sticky elements that are not the player: bottom navigation, consent banners, other sticky ads.

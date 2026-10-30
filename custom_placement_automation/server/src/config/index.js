@@ -25,6 +25,8 @@ const config = {
   port: Number(process.env.PORT) || 3000,
   host: '127.0.0.1',
   databaseUrl: process.env.DATABASE_URL,
+  // Branch · commit · date, set by `npm run app` and shown in the dashboard footer.
+  version: process.env.APP_VERSION || '',
   env: process.env.NODE_ENV || 'development',
 
   clientDistDir: fs.existsSync(path.join(clientDistDir, 'index.html')) ? clientDistDir : null,

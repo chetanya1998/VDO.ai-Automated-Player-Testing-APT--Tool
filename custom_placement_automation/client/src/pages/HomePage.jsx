@@ -3,13 +3,18 @@ import NewCheckForm from '../components/checks/NewCheckForm.jsx';
 import CurrentCheck from '../components/checks/CurrentCheck.jsx';
 import HistorySection from '../components/history/HistorySection.jsx';
 import { Alert, StatusPill } from '../components/ui';
-import { getReadiness } from '../api/settings.js';
+import { getReadiness, getSettings } from '../api/settings.js';
 
 export default function HomePage() {
   const [currentJob, setCurrentJob] = useState(null);
   const [running, setRunning] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
   const [prefill, setPrefill] = useState(null);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    getSettings().then((settings) => setVersion(settings.version ?? '')).catch(() => {});
+  }, []);
   const [apiUp, setApiUp] = useState(null);
   const [readiness, setReadiness] = useState(null);
 
@@ -101,6 +106,8 @@ export default function HomePage() {
         {currentJob && <CurrentCheck key={currentJob.id} job={currentJob} onFinished={handleFinished} />}
         <HistorySection refreshKey={historyKey} onRerun={handleRerun} />
       </main>
+      {/* Which code is running: branch · commit · date (set when started with npm run app). */}
+      {version && <footer className="app-version muted small">Version {version}</footer>}
     </div>
   );
 }

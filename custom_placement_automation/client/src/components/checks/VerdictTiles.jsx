@@ -1,12 +1,12 @@
 import { VERDICTS, VERDICT_HELP, verdictLabel, verdictTone } from '../../utils/verdicts.js';
 
 // One box per result type, so pass / fail / warning / unknown / N/A totals read separately.
-export default function VerdictTiles({ counts, total }) {
-  const sum = total ?? VERDICTS.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
+export default function VerdictTiles({ counts, total, verdicts = VERDICTS }) {
+  const sum = total ?? verdicts.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
 
   return (
-    <div className="verdict-tiles">
-      {VERDICTS.map((verdict) => {
+    <div className={`verdict-tiles${verdicts.length === 3 ? ' verdict-tiles-3' : ''}`}>
+      {verdicts.map((verdict) => {
         const value = counts?.[verdict] ?? 0;
         return (
           <div key={verdict} className={`verdict-tile tone-${verdictTone(verdict)}${value === 0 ? ' zero' : ''}`} title={VERDICT_HELP[verdict]}>

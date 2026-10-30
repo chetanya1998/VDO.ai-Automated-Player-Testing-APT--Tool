@@ -79,6 +79,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const [deep, setDeep] = useState(prefill?.deep ?? false);
   const [refreshIntervalSec, setRefreshIntervalSec] = useState(prefill?.refreshIntervalSec ?? null);
   const [stickyCode, setStickyCode] = useState(prefill?.stickyCode ?? 'none');
+  const [stickyAdditional, setStickyAdditional] = useState(prefill?.stickyAdditional ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -138,7 +139,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
         // The deep test and refresh check belong to the placement checks, not the sticky checker.
         deep: sticky ? false : deep,
         refreshIntervalSec: sticky ? null : refreshIntervalSec,
-        ...(sticky ? { stickyCode } : {}),
+        ...(sticky ? { stickyCode, stickyAdditional } : {}),
         script: !needsCode ? undefined : pasting ? codeText : codeFile ? await codeFile.text() : undefined,
         scriptId: useStored ? storedCode.id : undefined,
         scriptName: !needsCode ? undefined : pasting ? codeKind : (codeFile?.name ?? storedCode?.name),
@@ -160,7 +161,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const limitSeconds = urlTimeoutMs ? Math.round(urlTimeoutMs / 1000) : 60;
   const ratioPercent = Number.isFinite(Number(scrollRatio)) && scrollRatio !== '' ? Math.round(Number(scrollRatio) * 100) : null;
   const summary = [
-    type === CHECK_TYPE.JS ? 'Custom placement' : sticky ? `Sticky violation check · 25 checks${stickyCode === 'none' ? '' : ` · with ${stickyCode}`}` : 'CSS check',
+    type === CHECK_TYPE.JS ? 'Custom placement' : sticky ? `Sticky violation check · ${stickyAdditional ? '25 checks' : '13 mandatory checks'}${stickyCode === 'none' ? '' : ` · with ${stickyCode}`}` : 'CSS check',
     devices.length ? devices.map(capitalize).join(' + ') : 'No device',
     plural(urls.length, 'URL'),
     ...(deep && !sticky ? ['Deep test · 23 cases'] : []),
@@ -232,9 +233,22 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             <>
               <p className="form-note">
                 Each page is opened in Chromium and walked through like a reader: load, scroll down until the player floats, wait for the
-                ad, scroll up and down, reach the bottom, resize/zoom the window and click the close button. The player is checked against
-                all 25 sticky test cases (ST-01 to ST-25), with screenshots marking the player in blue and problems in red.
+                ad, scroll up and down, reach the bottom and click the close button. Every check gets Pass, Fail or Warning with a
+                screenshot as evidence (player in blue, problems in red).
               </p>
+              <Toggle
+                id="sticky-additional"
+                checked={stickyAdditional}
+                onChange={setStickyAdditional}
+                disabled={busy}
+                label="Also run the additional checks (ST-14 to ST-25)"
+                badge={stickyAdditional ? '25 checks' : '13 checks'}
+                description={
+                  stickyAdditional
+                    ? 'On: the 13 mandatory checks plus consent banners, control sizes, scrolling, closing, infinite scroll, window sizes, publisher CSS, initial load, empty space, short articles, zoom and navigation. Adds about 15 s per URL and device.'
+                    : 'Off: only the 13 mandatory checks run (ST-01 to ST-13). Turn on for the 12 additional checks.'
+                }
+              />
               <Segmented label="Code to apply first (optional)" options={STICKY_CODE_OPTIONS} value={stickyCode} onChange={(value) => { setStickyCode(value); setCodeFile(null); setCodeText(''); }} disabled={busy} />
             </>
           )}

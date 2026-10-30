@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 
 // A local article with a fake vdo.ai player for sticky checks.
 //   /article?mode=good  floats bottom-right after its place is scrolled past, closes, keeps clear of everything.
+//   /article?mode=mixed floats at the right time but over the header, with a cut-off close button (some checks fail).
 //   /article?mode=bad   floats on load inside a transformed <main> (so it scrolls with the page), over the headline,
 //                       adds page padding, jumps when the "ad" loads, has a cut-off close and Skip Ad button, leaves a
 //                       large empty gap, and a second floating copy covers the header, a sticky ad and the consent banner.
@@ -49,7 +50,7 @@ const loader = (mode) => `(() => {
     const close = document.createElement('button');
     close.className = 'vdo_close_btn';
     close.textContent = '×';
-    close.style.cssText = 'position:absolute;top:4px;width:26px;height:26px;z-index:2;' + (mode === 'bad' ? 'right:-18px' : 'right:4px');
+    close.style.cssText = 'position:absolute;top:4px;width:26px;height:26px;z-index:2;' + (mode === 'good' ? 'right:4px' : 'right:-18px');
     wrap.append(frame, close);
     return { wrap, close };
   };
@@ -60,6 +61,15 @@ const loader = (mode) => `(() => {
   let closed = false;
   close.onclick = () => { closed = true; wrap.style.display = 'none'; };
 
+  if (mode === 'mixed') {
+    // Mixed: floats at the right time, but in the top-right corner over the header, with its close button cut off.
+    const float = (on) => {
+      if (closed) return;
+      wrap.style.cssText = on ? 'position:fixed;right:0;top:0;width:560px;height:315px;z-index:9999;background:#123' : inContent;
+    };
+    addEventListener('scroll', () => float(anchor.getBoundingClientRect().bottom < 0));
+    return;
+  }
   if (mode === 'good') {
     const float = (on) => {
       if (closed) return;
@@ -83,15 +93,17 @@ const loader = (mode) => `(() => {
   document.body.append(copy.wrap);
 })();`;
 
+const modeOf = (value) => (['bad', 'mixed'].includes(value) ? value : 'good');
+
 export async function startStickySite() {
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
     request.resume();
     if (url.pathname === '/article') {
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      response.end(page(url.searchParams.get('mode') === 'bad' ? 'bad' : 'good'));
+      response.end(page(modeOf(url.searchParams.get('mode'))));
     } else if (url.pathname === `/core/${STICKY_TAG}/vdo.ai.js`) {
-      const mode = new URL(request.headers.referer ?? 'http://x/?mode=good').searchParams.get('mode') === 'bad' ? 'bad' : 'good';
+      const mode = modeOf(new URL(request.headers.referer ?? 'http://x/?mode=good').searchParams.get('mode'));
       response.writeHead(200, { 'content-type': 'application/javascript; charset=utf-8', 'cache-control': 'no-store' });
       response.end(loader(mode));
     } else {

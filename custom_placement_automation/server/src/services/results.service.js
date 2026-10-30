@@ -33,7 +33,7 @@ async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false }, run) {
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
@@ -65,7 +65,12 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
     ...(deep ? { deep: true, deepSummary: summarizeDeepRun(results) } : {}),
     ...(refreshIntervalSec ? { refreshIntervalSec } : {}),
     // Sticky runs keep their 25-check counts per URL for History, never summed across URLs.
-    ...(stickyCode ? { stickyCode, stickySummary: { perUrl: results.filter((r) => r.sticky).map((r) => ({ url: r.url, overallVerdict: r.sticky.overallVerdict, verdictCounts: r.sticky.verdictCounts })) } } : {}),
+    ...(stickyCode ? {
+      stickyCode,
+      stickyAdditional,
+      reviewCount: run.reviewCount ?? 0,
+      stickySummary: { perUrl: results.filter((r) => r.sticky).map((r) => ({ url: r.url, overallVerdict: r.sticky.overallVerdict, review: r.sticky.review, passShare: r.sticky.passShare, total: r.sticky.total, verdictCounts: r.sticky.verdictCounts })) },
+    } : {}),
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     results,

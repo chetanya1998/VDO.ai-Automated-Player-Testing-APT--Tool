@@ -8,6 +8,9 @@ export const REASON_LABELS = {
   timeout: 'Page load timed out',
   page_closed: 'Page closed during check',
   player_not_found: 'vdo.ai player not found',
+  review_required: 'Review required',
+  not_judged: 'Could not be judged',
+  page_open_failed: 'Page could not be opened',
 };
 
 export const reasonLabel = (reason) => REASON_LABELS[reason] ?? reason;

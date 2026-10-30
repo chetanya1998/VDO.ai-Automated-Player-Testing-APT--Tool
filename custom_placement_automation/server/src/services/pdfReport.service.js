@@ -16,6 +16,9 @@ const REASON_LABELS = {
   timeout: 'Page load timed out',
   page_closed: 'Page closed during check',
   player_not_found: 'vdo.ai player not found',
+  review_required: 'Review required',
+  not_judged: 'Could not be judged',
+  page_open_failed: 'Page could not be opened',
 };
 
 let pdfBrowserPromise = null;
@@ -91,9 +94,9 @@ const VERDICT_HELP = {
 const GENERIC_REASON = 'Observed behaviour matched the rule.';
 
 // One box per result type, so the totals read separately.
-function renderVerdictTiles(counts, total) {
-  const sum = total ?? VERDICT_ORDER.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
-  return `<div class="tiles">${VERDICT_ORDER.map((verdict) => {
+function renderVerdictTiles(counts, total, verdicts = VERDICT_ORDER) {
+  const sum = total ?? verdicts.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
+  return `<div class="tiles">${verdicts.map((verdict) => {
     const value = counts?.[verdict] ?? 0;
     return `<div class="tile ${VERDICT_CLASS[verdict]}${value === 0 ? ' zero' : ''}"><b>${value}</b><span>${VERDICT_LABEL[verdict]}</span><small>${sum ? Math.round((value / sum) * 100) : 0}%</small></div>`;
   }).join('')}</div>`;
@@ -191,9 +194,12 @@ function renderStickyCase(c) {
   return `<tr class="${tone}">
     <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td>
     <td><b>${escapeHtml(c.title)}</b><div class="plain"><i>What it tests:</i> ${escapeHtml(c.checks)}</div><div class="plain"><i>Expected:</i> ${escapeHtml(c.expected)}</div></td>
-    <td><b>${escapeHtml(c.summary)}</b>${c.seenAt ? `<div class="plain"><i>Seen at:</i> ${escapeHtml(c.seenAt)}</div>` : ''}</td>
+    <td><b>${escapeHtml(c.summary)}</b>${Number.isInteger(c.evidence) ? `<div class="plain"><i>Evidence:</i> screenshot #${c.evidence + 1}${c.seenAt ? ` (${escapeHtml(c.seenAt)})` : ''}</div>` : c.seenAt ? `<div class="plain"><i>Seen at:</i> ${escapeHtml(c.seenAt)}</div>` : ''}</td>
   </tr>`;
 }
+
+// Overall from the share of judged checks that passed: ≥ 80% PASS, 50–80% PASS · Review required, < 50% FAIL.
+const stickyOverall = (sticky) => (sticky.overallVerdict === 'PASS' && sticky.review ? 'PASS · Review required' : sticky.overallVerdict === 'WARNING' ? 'Could not be judged' : sticky.overallVerdict);
 
 function renderStickyResult(run, result, index, images) {
   const sticky = result.sticky;
@@ -206,6 +212,9 @@ function renderStickyResult(run, result, index, images) {
         ['Player type', sticky.playerType],
         ['Floating started', sticky.floatingStartedAt ? `${sticky.floatingStartedAt.label} (scrolled ${sticky.floatingStartedAt.scrollY} px)` : 'never'],
         ['Viewport', sticky.viewport ? `${sticky.viewport.width}×${sticky.viewport.height}` : '—'],
+        ['Browser', sticky.browserVersion ?? '—'],
+        ['Checks run', sticky.includeAdditional ? 'ST-01 to ST-25 (mandatory + additional)' : 'ST-01 to ST-13 (mandatory)'],
+        ['Judged checks passed', sticky.passShare === null || sticky.passShare === undefined ? '— (none could be judged)' : `${sticky.verdictCounts.PASS} of ${sticky.verdictCounts.PASS + sticky.verdictCounts.FAIL} (${Math.round(sticky.passShare * 100)}%)`],
         ['Snapshots taken', String(sticky.snapshots)],
         ['Duration', formatSeconds(result.durationMs)],
       ]
@@ -214,16 +223,16 @@ function renderStickyResult(run, result, index, images) {
   <section class="result ${result.status} has-deep">
     <header>
       <span class="badge ${result.status}">Sticky: ${result.status.toUpperCase()}</span>
-      ${sticky ? `<span class="badge ${VERDICT_CLASS[sticky.overallVerdict] ?? 'unknown'}">${sticky.verdictCounts.FAIL} failed · ${sticky.verdictCounts.WARNING} warnings</span>` : ''}
+      ${sticky ? `<span class="badge ${VERDICT_CLASS[sticky.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(stickyOverall(sticky))}</span><span class="badge unknown">${sticky.verdictCounts.PASS} pass · ${sticky.verdictCounts.FAIL} fail · ${sticky.verdictCounts.WARNING} warning</span>` : ''}
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
     ${result.reasons.length ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>` : ''}
     <dl>${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-    ${sticky ? renderVerdictTiles(sticky.verdictCounts, 25) : ''}
-    ${images.length ? `<div class="shots"><p class="deep-h shots-h">Evidence screenshots (blue = vdo.ai player, red = problem area)</p>${images.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
-    ${table('core', 'Core checks (ST-01 to ST-12, must test)')}
-    ${table('additional', 'Additional checks (ST-13 to ST-25, recommended)')}
+    ${sticky ? renderVerdictTiles(sticky.verdictCounts, sticky.total ?? 25, ['PASS', 'FAIL', 'WARNING']) : ''}
+    ${images.length ? `<div class="shots"><p class="deep-h shots-h">${sticky ? 'Evidence screenshots (blue = vdo.ai player, red = problem area); each check below names its screenshot' : 'What the site showed'}</p>${images.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
+    ${table('core', 'Mandatory checks (ST-01 to ST-13)')}
+    ${table('additional', 'Additional checks (ST-14 to ST-25)')}
     ${sticky?.notes?.length ? `<p class="deep-h">Notes</p><ul class="notes">${sticky.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>` : ''}
   </section>`;
 }
@@ -288,7 +297,10 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
     ['Script', run.script?.name ?? '—'],
     ...(run.type === 'sticky' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
     ...(run.type === 'sticky'
-      ? [['Code applied', run.stickyCode === 'none' || !run.stickyCode ? 'None (live tag as served)' : run.stickyCode]]
+      ? [
+          ['Code applied', run.stickyCode === 'none' || !run.stickyCode ? 'None (live tag as served)' : run.stickyCode],
+          ['Additional checks', run.stickyAdditional ? 'Included (ST-14 to ST-25)' : 'Not included (mandatory ST-01 to ST-13 only)'],
+        ]
       : [
           ['Deep test', run.deep ? 'On (all 23 cases per URL, plus the safe frame check)' : 'Off'],
           ['Ad slot refresh check', run.refreshIntervalSec ? `On (every ${run.refreshIntervalSec} s)` : 'Off'],
@@ -381,11 +393,11 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${sticky ? 'Sticky violation check' : 'Placement check'}: ${status.toUpperCase()}</span></h1>
   <div class="sub">${sticky ? 'Sticky violation report' : 'Placement report'} · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
   <dl class="meta">${meta.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-  <h2 class="section-title">${sticky ? 'Sticky violation check · 25 checks per URL' : 'Custom placement check'}</h2>
-  <p class="section-note">${sticky ? 'Counts URLs. A URL fails when any of its 25 checks fails; warnings need a look but do not fail it. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
+  <h2 class="section-title">${sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : 'Custom placement check'}</h2>
+  <p class="section-note">${sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings, which could not be judged, are left out): 80% or more passed = PASS, 50% to under 80% = PASS · Review required, under 50% = FAIL. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
   <div class="summary">
     <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs checked</div>
-    <div class="pass"><b>${run.passCount}</b>URLs passed</div>
+    <div class="pass"><b>${run.passCount}</b>URLs passed${sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}</div>
     <div class="fail"><b>${run.failCount}</b>URLs failed</div>
     <div class="error"><b>${run.errorCount}</b>URLs with errors</div>
   </div>

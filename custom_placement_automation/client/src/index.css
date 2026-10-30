@@ -1637,3 +1637,17 @@ a.btn {
 .extra-check .facts { font-size: 12.5px; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
 .extra-check .facts dd { overflow-wrap: anywhere; }
 .facts-row { display: contents; }
+
+/* Sticky checks: three result tiles, evidence next to each check's explanation */
+.verdict-tiles.verdict-tiles-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.case-evidence { font-size: 11px; color: var(--muted); }
+.sticky-detail-body { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: start; }
+.sticky-detail-text { display: grid; gap: 10px; min-width: 0; }
+.sticky-evidence { min-width: 0; }
+.sticky-evidence h6 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.sticky-evidence .shots { grid-template-columns: 1fr; }
+details.deep-shots > summary { cursor: pointer; font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+@media (max-width: 760px) {
+  .sticky-detail-body { grid-template-columns: 1fr; }
+}
+.app-version { text-align: center; padding: 8px 16px 24px; }

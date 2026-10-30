@@ -45,6 +45,7 @@ function toPublicJob(job) {
     deep: input.deep === true,
     refreshIntervalSec: input.refreshIntervalSec ?? null,
     stickyCode: input.stickyCode ?? null,
+    stickyAdditional: input.stickyAdditional === true,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
 }
@@ -68,7 +69,7 @@ async function processJob(job) {
         };
         // Sticky violation checker: its own scenario instead of the placement check.
         if (input.type === STICKY_TYPE) {
-          const run = await runStickyChecks({ tag: input.tag, device, urls: input.urls, script, codeType: input.stickyCode ?? 'none', onUrlDone });
+          const run = await runStickyChecks({ tag: input.tag, device, urls: input.urls, script, codeType: input.stickyCode ?? 'none', includeAdditional: input.stickyAdditional === true, onUrlDone });
           job.runs.push(await saveRun(input, run));
           await getDatabase().saveJob(job);
           continue;

@@ -38,7 +38,11 @@ const BASE_COLUMNS = [
         {checkTypeName(run.type)}
         {run.refreshIntervalSec && <small>+ refresh check · {run.refreshIntervalSec} s</small>}
         {(run.stickySummary?.perUrl ?? []).slice(0, 3).map((item, i, all) => (
-          <small key={`${item.url}-${i}`}>{all.length > 1 ? `URL ${i + 1}: ` : ''}{item.verdictCounts?.FAIL ?? 0} failed · {item.verdictCounts?.WARNING ?? 0} warnings of 25</small>
+          <small key={`${item.url}-${i}`}>
+            {all.length > 1 ? `URL ${i + 1}: ` : ''}
+            {item.overallVerdict === 'PASS' ? (item.review ? 'Pass · review' : 'Pass') : item.overallVerdict === 'FAIL' ? 'Fail' : 'Not judged'}
+            {Number.isFinite(item.passShare) ? ` · ${Math.round(item.passShare * 100)}% passed` : ''} · {item.verdictCounts?.FAIL ?? 0} fail of {item.total ?? 25}
+          </small>
         ))}
       </span>
     ),
@@ -98,6 +102,7 @@ const toRerunSettings = (run) => ({
   deep: run.deep === true,
   refreshIntervalSec: run.refreshIntervalSec ?? null,
   stickyCode: run.stickyCode ?? 'none',
+  stickyAdditional: run.stickyAdditional === true,
   startedAt: run.startedAt,
 });
 
