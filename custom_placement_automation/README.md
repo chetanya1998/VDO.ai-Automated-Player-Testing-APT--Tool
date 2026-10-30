@@ -91,17 +91,22 @@ These are shown in their own **Additional checks** block under each URL and in t
 
 ### Sticky violation checker (ST-01 to ST-25)
 
-Pick **Sticky violation checker** in step 1. It runs the 25 checks from *VDOAI Sticky Violation Test Cases – Chromium* on each URL and device. Like the placement checks, it can first apply a `vdo.ai.js` or `style.css` (**Code to apply first**). The default is **None**: the live tag as the site serves it. The deep test and refresh check are not offered with it.
+Pick **Sticky violation checker** in step 1. It runs the checks from *VDOAI Sticky Violation Test Cases – Status Criteria* on each URL and device:
 
-**What the tool does on each page** (about 40–90 s per URL and device):
+- **Mandatory, always run:** ST-01 to ST-13.
+- **Additional, only when ticked:** ST-14 to ST-25, via **Also run the additional checks** in the form.
+
+Like the placement checks, it can first apply a `vdo.ai.js` or `style.css` (**Code to apply first**). The default is **None**: the live tag as the site serves it. The deep test and refresh check are not offered with it.
+
+**What the tool does on each page** (about 30 s per URL and device for the mandatory checks; about 15 s more with the additional checks):
 
 1. **Initial load:** it watches the page for 5 seconds without scrolling.
 2. **Scroll down:** half a screen at a time, until the player's place in the article is well behind.
 3. **Ad load:** it waits 10 s without scrolling while the ad loads.
 4. **Small scrolls:** up and down a little, three times.
 5. **Bottom:** it scrolls to the bottom of the page (at most 15 screens, for infinite scroll).
-6. **Window sizes:** it goes back to the article and tries other sizes. Desktop gets 1024×640, 800×600, and 125% and 150% zoom. Mobile gets landscape and a 360×640 phone.
-7. **Close:** it clicks the floating player's close button and keeps scrolling.
+6. **Window sizes (additional checks only):** it goes back to the article and tries other sizes. Desktop gets 1024×640, 800×600, and 125% and 150% zoom. Mobile gets landscape and a 360×640 phone.
+7. **Close:** it clicks the floating player's close button; with the additional checks it then keeps scrolling to see whether the player comes back.
 
 **How it measures:**
 
@@ -112,15 +117,31 @@ Pick **Sticky violation checker** in step 1. It runs the 25 checks from *VDOAI S
 
 **Results:**
 
-- Each check gets Pass / Fail / Warning / Unknown / N/A with a plain-language reason. A URL fails when any check fails; warnings don't fail it.
-- The 25 checks are shown as Core (ST-01–12) and Additional (ST-13–25) on the dashboard and in the PDF. Each says where the problem was seen.
-- Up to 8 evidence screenshots per URL mark the player in blue and problem areas in red.
+- Only three statuses, as in the status criteria document:
+  - **Pass:** the observed result matches the expected result.
+  - **Fail:** it does not.
+  - **Warning:** it could not be judged on this page (the situation didn't occur, a prerequisite was missing, or the setting is unknown).
+  - There is no N/A, Unknown or "Not run".
+- **Screenshot evidence for every check**, including passes and warnings. A screenshot is taken at every step, with the player outlined in blue and problems in red. Each check shows the one from the moment that decided it ("Screenshot #3"); click the check to see it next to the explanation. The PDF lists the same numbers.
+- **Overall result per URL**, from the share of *judged* checks (Pass + Fail) that passed. Warnings are left out:
+
+  | Judged checks passed | Overall |
+  |---|---|
+  | 80% or more | **Pass** |
+  | 50% to under 80% | **Pass · Review required** |
+  | Under 50% | **Fail** |
+  | None could be judged | **Could not be judged** |
+
+  Example: 8 pass, 3 fail, 2 warnings = 8 of 11 = 73% → Pass · Review required. The run summary counts how many URLs need review.
+- **Page blocked:** a URL the site refuses (bot protection, HTTP 401/403/429/503) shows the HTTP status, the page title and a screenshot of what the site showed. A page that could not be opened at all shows **Page could not be opened** with the error.
 
 **Rules worth knowing:**
 
 - **ST-08:** a floating player covering more than 30% of the screen fails. The Better Ads Standards call that a large sticky ad.
 - **ST-06/07/23:** "too early" means floating before the player's place in the article has entered the screen. The tool doesn't know each tag's configured activation point.
-- **ST-22:** an empty gap left in the article is a Warning (it may be kept on purpose so the text doesn't jump). It fails only when the gap is more than 1.5 times the player's height.
+- **ST-02 / ST-03:** only the site header and main menu (near the top of the page, or fixed to the top) and the article headline (`h1`) count. Breadcrumbs, pagination, widget headers and related-post titles don't.
+- **ST-20:** an in-content player scrolling under the site's own sticky header is normal and is not counted as a z-index problem.
+- **ST-22:** an empty gap of 50 px or more left in the article while the player floats fails.
 - **ST-24:** zoom is emulated with the smaller CSS window a zoomed browser has.
 - **ST-18/25:** these apply only when a next article loads in the page. Each URL otherwise opens fresh, so stale state can't carry over from another page.
 
@@ -131,10 +152,31 @@ Pick **Sticky violation checker** in step 1. It runs the 25 checks from *VDOAI S
 - Every run is saved locally and listed in **History**.
 - **Re-run:** fills the form with that run's settings and stored script so you can change something and run it again.
 - **PDF:** downloads a report for the run, with all results and screenshots. Deep runs add separate result totals, a legend of what each result means, and for every test case what it tested and what its result means in plain words.
-- **Re-run** keeps the deep test and refresh check settings.
+- **Re-run** keeps the deep test, refresh check and sticky settings (code to apply, additional checks).
 - **Delete / Clear all:** removes runs and their screenshots.
 
-## Quick start
+## Quick start: one command
+
+After installing **Git, Node.js 24 LTS (22+), PostgreSQL and Google Chrome** once, clone the repository and run, from the repository root or from this folder:
+
+```bash
+npm run app
+```
+
+On Windows you can also double-click **`Start VDO Tool.cmd`** in the repository root. Step-by-step: [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md).
+
+`npm run app` (`scripts/app.mjs`):
+
+1. **Updates:** fetches the latest version of the current branch from GitHub (fast-forward only; it never merges or overwrites local edits) and restarts itself if it changed.
+2. **Settings, first run only:** asks for the PostgreSQL host, port, user, password (hidden) and database name, and writes `server/.env`.
+3. **Installs packages** for the deep test engine (pnpm, `--frozen-lockfile`) and for the app (`npm ci`, never rewrites lockfiles). It does this only when a `package.json` or lockfile changed. If Playwright's Chromium can't be downloaded, Google Chrome is used.
+4. **Builds** the deep test engine and the dashboard only when their code changed.
+5. **Connects to PostgreSQL**, creating the database if it doesn't exist.
+6. **Starts the server** at **http://127.0.0.1:3000** (dashboard included) and opens the browser. The dashboard footer shows the branch, commit and date that are running.
+
+Options: `--no-update`, `--branch <name>` (switch branch first), `--setup` (change the PostgreSQL settings), `--no-open`. Pass them after `--`, e.g. `npm run app -- --branch custom-placement-automation`.
+
+### Developer setup
 
 ```bash
 npm run setup || bash setup.sh
@@ -152,6 +194,7 @@ If Chromium is missing, run `node server/node_modules/playwright/cli.js install 
 
 | Command (project root) | Does |
 |---|---|
+| `npm run app` | Everyday use: update, install/build what changed, start on port 3000 |
 | `npm install` | Installs server and client dependencies, plus Chromium |
 | `npm start` | Starts the API (port 3000) and the UI (port 5173) together |
 | `npm run setup` / `bash setup.sh` | Full setup: checks Node, installs everything, starts the app (`--no-start` to only install) |

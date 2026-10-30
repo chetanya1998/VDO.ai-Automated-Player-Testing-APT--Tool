@@ -1,6 +1,6 @@
 # Setup
 
-> **Windows / PowerShell:** `bash setup.sh` does not run in PowerShell. Follow the step-by-step [Windows installation guide](INSTALL-WINDOWS.md), which also covers PostgreSQL 18 and the deep test engine.
+> **Everyday use, any system:** install Git, Node.js 24 LTS (22+), PostgreSQL and Google Chrome once, then run `npm run app` from the repository root. It updates from GitHub, asks for the PostgreSQL settings the first time, installs and builds only what changed, and starts the tool on http://127.0.0.1:3000. On Windows you can double-click `Start VDO Tool.cmd`. See [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) and the [README quick start](README.md#quick-start-one-command). The rest of this page is the manual and developer setup.
 
 **Local PostgreSQL is now required.** Before the final start step, set `DATABASE_URL` in `server/.env` to your local connection. The server creates the `custom_placement` schema and imports an existing `server/storage/reports.json` once. The setup script does not install PostgreSQL. See [LOCAL-VALIDATION-PLAN.md](LOCAL-VALIDATION-PLAN.md) for recovery, tests and the 23-case rollout.
 
