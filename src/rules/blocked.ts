@@ -1,4 +1,5 @@
 import type { CheckResult, Evidence, JsonValue, Verdict } from "../contracts.js";
+import { isTagAnchorId } from "./integration.js";
 
 export type BlockExpectation = "expected" | "unexpected" | "unknown";
 export type BlockEvent = "blocked_player" | "blocked_inline" | "blocked_autoplay" | "blocked_ima" | "blocked_agent" | "blocked_device" | "blocked_url" | "error";
@@ -11,7 +12,8 @@ export interface RuntimePolicy {
   blocks: Record<BlockEvent, { expectation: BlockExpectation; byDevice: Record<string, BlockExpectation> }>;
   forceplayFailureAttempts: number;
   errorCodes: Record<string, { meaning: "missing_anchor" | null }>;
-  dependencies: Array<{ id: string; products: string[]; required: boolean; pathSuffixes: string[] }>;
+  // pathPatterns: case-insensitive regular expressions for versioned file names such as vdo.player.8.0.js.
+  dependencies: Array<{ id: string; products: string[]; required: boolean; pathSuffixes: string[]; pathPatterns?: string[] }>;
 }
 
 export interface BlockedValidationInput {
@@ -99,6 +101,10 @@ export function parseRuntimePolicy(value: unknown): RuntimePolicy {
       products: strings(entry.products, `runtimePolicy.dependencies[${index}].products`),
       required: entry.required,
       pathSuffixes: strings(entry.pathSuffixes, `runtimePolicy.dependencies[${index}].pathSuffixes`),
+      ...(entry.pathPatterns === undefined ? {} : { pathPatterns: strings(entry.pathPatterns, `runtimePolicy.dependencies[${index}].pathPatterns`).map((pattern, patternIndex) => {
+        try { new RegExp(pattern, "i"); } catch { throw new TypeError(`runtimePolicy.dependencies[${index}].pathPatterns[${patternIndex}] is not a valid pattern`); }
+        return pattern;
+      }) }),
     };
   });
   const ids = dependencies.map((item) => item.id);
@@ -145,7 +151,7 @@ function anchorMissing(evidence: readonly Evidence[], tagName: string): boolean 
   const dom = evidence.filter((item) => item.source === "browser_dom");
   if (dom.length === 0) return null;
   const anchors = dom.flatMap((item) => Array.isArray(item.data.anchors) ? item.data.anchors : []);
-  return !anchors.some((value) => typeof value === "object" && value !== null && !Array.isArray(value) && value.id === tagName);
+  return !anchors.some((value) => typeof value === "object" && value !== null && !Array.isArray(value) && isTagAnchorId(typeof value.id === "string" ? value.id : null, tagName));
 }
 
 function worst(classifications: readonly BlockClassification[]): Verdict {
@@ -190,9 +196,16 @@ export function validateBlockedEvents(input: BlockedValidationInput): BlockedVal
       category = missingAnchor === true ? "IMPLEMENTATION" : "TOOLING";
       cause = missingAnchor === true ? "missing_anchor" : "anchor_state_unconfirmed";
     }
+    // Tech Doc: Blocked URL fires between loaded and initVdo, the others between initVdo and Pageview.
+    const position = placement(item, timeline);
+    if (position === "outside" && policy.status === "confirmed" && VERDICT_RANK[verdict] < VERDICT_RANK.WARNING) {
+      verdict = "WARNING";
+      category = "RUNTIME_BROWSER";
+    }
+    if (position === "outside") cause = `${cause}_outside_documented_window`;
     return {
       event, rawEvent, evidenceId: item.evidenceId, expectation: expected, verdict, category,
-      placement: placement(item, timeline), errorCode: code, meaning: codePolicy?.meaning ?? null, cause,
+      placement: position, errorCode: code, meaning: codePolicy?.meaning ?? null, cause,
       forceplayAttemptsObserved: forceplayAttempts, recoveredAfterBlock: recovered,
     };
   });

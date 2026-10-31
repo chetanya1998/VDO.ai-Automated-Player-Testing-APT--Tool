@@ -25,8 +25,8 @@ function placementSucceeded(event) {
   return event.detail?.success !== false;
 }
 
-const BLOCKED_STATUSES = new Set([401, 403, 429, 503]);
-const BLOCKED_TITLE = /just a moment|attention required|access denied|captcha|are you a robot|verify you are human/i;
+export const BLOCKED_STATUSES = new Set([401, 403, 429, 503]);
+export const BLOCKED_TITLE = /just a moment|attention required|access denied|captcha|are you a robot|verify you are human/i;
 
 function placementListenerScript(eventName) {
   window.__vdoPlacementEvents = [];
@@ -52,7 +52,7 @@ function placementListenerScript(eventName) {
   document.addEventListener(eventName, record);
 }
 
-function injectStyleScript(css) {
+export function injectStyleScript(css) {
   if (window !== window.top) return;
   const style = document.createElement('style');
   style.id = '__placement_check_style';
@@ -73,7 +73,7 @@ function injectStyleScript(css) {
   window.addEventListener('load', attach);
 }
 
-function guardWindowCloseScript() {
+export function guardWindowCloseScript() {
   if (window !== window.top) return;
   window.__vdoCloseAttempts = 0;
   window.close = function blockedClose() {
@@ -90,7 +90,7 @@ function reasonForError(err) {
 
 const isTagScript = (url, tag) => (url.hostname === 'vdo.ai' || url.hostname.endsWith('.vdo.ai')) && url.pathname === `/core/${tag}/vdo.ai.js`;
 
-async function overrideTagScript(context, tag, script) {
+export async function overrideTagScript(context, tag, script) {
   const stats = { hits: 0 };
   await context.route(
     (url) => isTagScript(url, tag),
@@ -207,7 +207,7 @@ async function settleForScreenshot(page) {
   await page.waitForTimeout(config.placement.screenshotSettleMs);
 }
 
-async function blockNavigation(page) {
+export async function blockNavigation(page) {
   const mainFrame = page.mainFrame();
   const handler = (route) => {
     const request = route.request();

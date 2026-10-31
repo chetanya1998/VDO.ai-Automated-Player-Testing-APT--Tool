@@ -28,7 +28,9 @@ export function validateDependencies(input: DependencyValidationInput): CheckRes
   const requests = scoped.map((item) => ({ item, parsed: url(item) })).filter((value): value is { item: Evidence; parsed: URL } => value.parsed !== null);
   const configured = policy.dependencies.filter((item) => item.products.includes(input.product));
   const observations = configured.map((dependency) => {
-    const matched = requests.filter(({ parsed }) => dependency.pathSuffixes.some((suffix) => parsed.pathname.endsWith(suffix))).map(({ item }) => item);
+    const patterns = (dependency.pathPatterns ?? []).map((pattern) => new RegExp(pattern, "i"));
+    const matched = requests.filter(({ parsed }) => dependency.pathSuffixes.some((suffix) => parsed.pathname.endsWith(suffix))
+      || patterns.some((pattern) => pattern.test(parsed.pathname))).map(({ item }) => item);
     const failed = matched.find((item) => outcome(item) !== "http_success");
     const success = matched.some((item) => outcome(item) === "http_success");
     const state = failed !== undefined ? "failed" : success ? "loaded" : input.captureComplete ? "missing" : "unknown";

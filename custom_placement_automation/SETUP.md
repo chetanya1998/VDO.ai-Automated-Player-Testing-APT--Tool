@@ -1,6 +1,6 @@
 # Setup
 
-> **Windows / PowerShell:** `bash setup.sh` does not run in PowerShell. Follow the step-by-step [Windows installation guide](INSTALL-WINDOWS.md), which also covers PostgreSQL 18 and the deep test engine.
+> **Everyday use, any system:** install Git, Node.js 24 LTS (22+), PostgreSQL and Google Chrome once, then run `npm run app` from the repository root. It updates from GitHub, asks for the PostgreSQL settings the first time, installs and builds only what changed, and starts the tool on http://127.0.0.1:3000. On Windows you can double-click `Start VDO Tool.cmd`. See [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) and the [README quick start](README.md#quick-start-one-command). The rest of this page is the manual and developer setup.
 
 **Local PostgreSQL is now required.** Before the final start step, set `DATABASE_URL` in `server/.env` to your local connection. The server creates the `custom_placement` schema and imports an existing `server/storage/reports.json` once. The setup script does not install PostgreSQL. See [LOCAL-VALIDATION-PLAN.md](LOCAL-VALIDATION-PLAN.md) for recovery, tests and the 23-case rollout.
 
@@ -90,7 +90,10 @@ On Windows (PowerShell): `Copy-Item server/.env.example server/.env`
 | `PORT` | `3000` | API port. If you change it, also change the proxy target in `client/vite.config.js` |
 | `HEADLESS` | `false` | `false` shows the browser window during checks. **Set to `true` on a machine without a display** (servers, containers) |
 | `NAVIGATION_TIMEOUT_MS` | `30000` | Max time to load a page |
+| `BROWSER_CHANNEL` | `auto` | `auto` uses Google Chrome when installed (plays MP4/H.264 video ads), otherwise Chromium; `chrome` or `chromium` forces one |
+| `CHROME_PATH` | — | Full path to `chrome.exe` / Chrome, only if it is installed somewhere unusual |
 | `URL_TIMEOUT_MS` | `60000` | Max time per URL, including all checks |
+| `STICKY_URL_TIMEOUT_MS` | `180000` | Max time per URL for the sticky violation checker |
 | `PLACEMENT_EVENT_SETTLE_MS` | `3000` | How long to keep listening after the first `vdo:placement` event |
 | `SCREENSHOT_SETTLE_MS` | `1200` | Pause before each screenshot so the player can settle |
 | `SCROLL_STEP_VIEWPORT_RATIO` | `0.45` | Default scroll step, as a fraction of the screen height |

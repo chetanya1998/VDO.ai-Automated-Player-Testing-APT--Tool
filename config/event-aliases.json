@@ -27,6 +27,7 @@
     "Blocked Agent": "blocked_agent",
     "Blocked Device": "blocked_device",
     "Blocked URL": "blocked_url",
-    "Error": "error"
+    "Error": "error",
+    "Auto Play": "auto_plays"
   }
 }

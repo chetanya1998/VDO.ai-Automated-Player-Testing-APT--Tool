@@ -3,16 +3,14 @@ import { SUPPORTED_DEVICES } from '../services/browser.service.js';
 import * as jobQueue from '../services/jobQueue.service.js';
 import { CHECK_TYPE } from '../services/placementRunner.service.js';
 import { loadScript, storeScript } from '../services/scriptStore.service.js';
-import { deepReadiness } from '../services/deepValidation.service.js';
+import { REFRESH_INTERVALS_SEC, deepReadiness } from '../services/deepValidation.service.js';
+import { STICKY_CODE, STICKY_TYPE } from '../services/stickyRunner.service.js';
 import { httpError } from '../utils/httpError.js';
 
 const TAG_PATTERN = /^[\w-]+$/;
 const DOMAIN_PATTERN = /^(?=.{1,253}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
 
-const normalizeHost = (host) => host.toLowerCase().replace(/^www\./, '');
-
-const normalizeDomain = (value) =>
-  normalizeHost(String(value).trim().replace(/^https?:\/\//i, '').split('/')[0]);
+import { normalizeDomain, offDomainUrls } from '../utils/domains.js';
 
 function parseScrollValue(value, name, label, unit = '') {
   const { min, max } = config.placement.scrollLimits[name];
@@ -30,7 +28,7 @@ function parseScroll(scroll = {}) {
   };
 }
 
-const CHECK_TYPES = Object.values(CHECK_TYPE);
+const CHECK_TYPES = [...Object.values(CHECK_TYPE), STICKY_TYPE];
 
 function parseCheckInput(body = {}) {
   const type = body.type ?? CHECK_TYPE.JS;
@@ -61,16 +59,40 @@ function parseCheckInput(body = {}) {
     }
     if (!/^https?:$/.test(url.protocol)) throw httpError(400, `URL must start with http(s): ${value}`);
     if (url.username || url.password) throw httpError(400, 'URLs must not contain credentials');
-    if (normalizeHost(url.hostname) !== domain && !normalizeHost(url.hostname).endsWith(`.${domain}`)) {
-      throw httpError(400, 'Every URL must belong to the supplied publisher domain');
-    }
+  }
+
+  // URLs on another host (staging, preview) are refused unless the user allows them; the domain field still
+  // names the publisher, so tag-to-domain checks keep judging against the real site.
+  if (body.allowOtherDomains !== undefined && typeof body.allowOtherDomains !== 'boolean') throw httpError(400, '`allowOtherDomains` must be true or false');
+  const allowOtherDomains = body.allowOtherDomains === true;
+  const offDomain = offDomainUrls(domain, urls);
+  if (offDomain.length > 0 && !allowOtherDomains) {
+    const hosts = [...new Set(offDomain.map((value) => new URL(value).hostname))];
+    throw httpError(400, `${offDomain.length === 1 ? 'This URL is' : `${offDomain.length} URLs are`} not on ${domain}: ${hosts.join(', ')}. Tick "Allow URLs on other domains (staging / preview)" to test ${offDomain.length === 1 ? 'it' : 'them'} anyway.`);
   }
 
   if (body.deep !== undefined && typeof body.deep !== 'boolean') throw httpError(400, '`deep` must be true or false');
   const deep = body.deep === true;
+  // Ad slot refresh check: a separate option, off (null) or one of the agreed intervals.
+  const refreshIntervalSec = body.refreshIntervalSec ?? null;
+  if (refreshIntervalSec !== null && !REFRESH_INTERVALS_SEC.includes(refreshIntervalSec)) {
+    throw httpError(400, `\`refreshIntervalSec\` must be null or one of ${REFRESH_INTERVALS_SEC.join(', ')}`);
+  }
+  // The sticky violation checker runs its own scenario; it can optionally apply a vdo.ai.js or style.css first.
+  let stickyCode = null;
+  let stickyAdditional = false;
+  if (type === STICKY_TYPE) {
+    // ST-01..ST-13 always run; ST-14..ST-25 only when asked for.
+    if (body.stickyAdditional !== undefined && typeof body.stickyAdditional !== 'boolean') throw httpError(400, '`stickyAdditional` must be true or false');
+    stickyAdditional = body.stickyAdditional === true;
+    if (deep || refreshIntervalSec) throw httpError(400, 'The deep test and refresh check are not available with the sticky violation checker');
+    stickyCode = body.stickyCode ?? 'none';
+    if (!STICKY_CODE.includes(stickyCode)) throw httpError(400, `\`stickyCode\` must be one of: ${STICKY_CODE.join(', ')}`);
+  }
   const scroll = parseScroll(body.scroll);
-  const scriptName = String(body.scriptName ?? type).slice(0, 200);
-  return { type, domain, tag, devices, urls, scroll, scriptName, deep };
+  const codeType = type === STICKY_TYPE ? stickyCode : type;
+  const scriptName = codeType === 'none' ? null : String(body.scriptName ?? codeType).slice(0, 200);
+  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType, allowOtherDomains, offDomainUrls: offDomain };
 }
 
 async function resolveScript(body, type) {
@@ -89,11 +111,11 @@ async function resolveScript(body, type) {
 
 export async function createPlacementCheck(req, res) {
   const input = parseCheckInput(req.body);
-  if (input.deep) {
+  if (input.deep || input.refreshIntervalSec) {
     const engine = await deepReadiness();
     if (!engine.available) throw httpError(503, engine.message);
   }
-  const { script, scriptId } = await resolveScript(req.body, input.type);
+  const { script, scriptId } = input.codeType === 'none' ? { script: '', scriptId: null } : await resolveScript(req.body, input.codeType);
   const job = await jobQueue.enqueueJob({ ...input, script, scriptId, scriptBytes: Buffer.byteLength(script) });
   res.status(202).json(job);
 }

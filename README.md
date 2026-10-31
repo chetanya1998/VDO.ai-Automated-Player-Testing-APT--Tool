@@ -477,7 +477,13 @@ Open `http://127.0.0.1:8787`, enter an authorised team token, submit an approved
 
 ### Placement Automation
 
-Requirements: Node.js 20+, `npm`, and a local PostgreSQL database role that can create the `custom_placement` schema.
+Everyday use, one command from the repository root (updates from GitHub, asks for the PostgreSQL settings the first time, installs and builds only what changed, starts on http://127.0.0.1:3000):
+
+```bash
+npm run app            # or double-click "Start VDO Tool.cmd" on Windows
+```
+
+Developer setup: Node.js 20+, `npm`, and a local PostgreSQL database role that can create the `custom_placement` schema.
 
 ```bash
 cd custom_placement_automation

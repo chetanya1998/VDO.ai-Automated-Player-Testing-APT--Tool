@@ -4,7 +4,7 @@ import { SearchIcon } from '../ui/icons.jsx';
 import RunResults from '../checks/RunResults.jsx';
 import { clearHistory, deleteRun, getRun, listRuns, runPdfUrl } from '../../api/history.js';
 import { formatDateTime, formatElapsed, formatStarted, runStatus } from '../../utils/format.js';
-import { CHECK_TYPE } from '../../utils/checkTypes.js';
+import { CHECK_TYPE, checkTypeName } from '../../utils/checkTypes.js';
 
 const PAGE_SIZE = 20;
 
@@ -12,18 +12,19 @@ const STATUS_LABELS = { pass: 'Passed', fail: 'Failed', error: 'Error' };
 
 const FILTERS = [
   { value: '', label: 'All runs' },
-  { value: 'status:pass', label: 'Passed' },
-  { value: 'status:fail', label: 'Failed' },
-  { value: 'status:error', label: 'Errors' },
+  { value: 'status:pass', label: 'Placement passed' },
+  { value: 'status:fail', label: 'Placement failed' },
+  { value: 'status:error', label: 'Placement errors' },
   { value: `type:${CHECK_TYPE.JS}`, label: 'Custom placement' },
   { value: `type:${CHECK_TYPE.CSS}`, label: 'CSS checks' },
+  { value: `type:${CHECK_TYPE.STICKY}`, label: 'Sticky checks' },
   { value: 'mode:deep', label: 'Deep tests' },
 ];
 
 const BASE_COLUMNS = [
   {
     key: 'status',
-    header: 'Status',
+    header: 'Result',
     render: (run) => {
       const status = runStatus(run);
       return <span className={`status-dot status-${status}`}>{STATUS_LABELS[status]}</span>;
@@ -32,7 +33,19 @@ const BASE_COLUMNS = [
   {
     key: 'type',
     header: 'Check type',
-    render: (run) => (run.type === CHECK_TYPE.CSS ? 'CSS check' : 'Custom placement'),
+    render: (run) => (
+      <span className="domain-cell">
+        {checkTypeName(run.type)}
+        {run.refreshIntervalSec && <small>+ refresh check · {run.refreshIntervalSec} s</small>}
+        {(run.stickySummary?.perUrl ?? []).slice(0, 3).map((item, i, all) => (
+          <small key={`${item.url}-${i}`}>
+            {all.length > 1 ? `URL ${i + 1}: ` : ''}
+            {item.overallVerdict === 'PASS' ? (item.review ? 'Pass · review' : 'Pass') : item.overallVerdict === 'FAIL' ? 'Fail' : 'Not judged'}
+            {Number.isFinite(item.passShare) ? ` · ${Math.round(item.passShare * 100)}% passed` : ''} · {item.verdictCounts?.FAIL ?? 0} fail of {item.total ?? 25}
+          </small>
+        ))}
+      </span>
+    ),
   },
   {
     key: 'domain',
@@ -41,25 +54,32 @@ const BASE_COLUMNS = [
       <span className="domain-cell">
         {run.domain}
         <small>{run.tag}</small>
+        {run.offDomainUrls?.length > 0 && <small className="text-warn">+ staging / preview URLs</small>}
       </span>
     ),
   },
   {
     key: 'mode',
-    header: 'Depth',
-    render: (run) =>
-      run.deep ? (
+    header: 'Deep test (23 cases per URL)',
+    render: (run) => {
+      if (run.type === CHECK_TYPE.STICKY) return <span className="muted">—</span>;
+      if (!run.deep) return <span className="muted">Not run</span>;
+      const perUrl = run.deepSummary?.perUrl ?? [];
+      if (perUrl.length === 0) return <span className="depth-tag">Deep</span>;
+      // One entry per URL, never summed across URLs.
+      const shown = perUrl.slice(0, 3);
+      return (
         <span className="depth-cell">
-          <span className="depth-tag">Deep</span>
-          {run.deepSummary && (
-            <small>
-              {run.deepSummary.verdictCounts.PASS}/{run.deepSummary.cases} pass · {run.deepSummary.verdictCounts.FAIL} fail
+          {shown.map((item, i) => (
+            <small key={`${item.url}-${i}`}>
+              {perUrl.length > 1 ? `URL ${i + 1}: ` : ''}
+              {item.verdictCounts?.PASS ?? 0}/23 passed · {item.verdictCounts?.FAIL ?? 0} failed
             </small>
-          )}
+          ))}
+          {perUrl.length > shown.length && <small>+{perUrl.length - shown.length} more URLs</small>}
         </span>
-      ) : (
-        <span className="muted">Standard</span>
-      ),
+      );
+    },
   },
   { key: 'device', header: 'Devices', render: (run) => run.device[0].toUpperCase() + run.device.slice(1) },
   { key: 'startedAt', header: 'Started', render: (run) => <time title={formatDateTime(run.startedAt)}>{formatStarted(run.startedAt)}</time> },
@@ -81,6 +101,10 @@ const toRerunSettings = (run) => ({
   scroll: run.scroll ?? null,
   script: run.script ?? null,
   deep: run.deep === true,
+  refreshIntervalSec: run.refreshIntervalSec ?? null,
+  stickyCode: run.stickyCode ?? 'none',
+  stickyAdditional: run.stickyAdditional === true,
+  allowOtherDomains: run.allowOtherDomains === true,
   startedAt: run.startedAt,
 });
 

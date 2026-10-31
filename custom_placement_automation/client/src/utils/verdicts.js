@@ -16,6 +16,15 @@ export const VERDICT_TONES = {
   NOT_APPLICABLE: 'na',
 };
 
+// What each result means, in plain words (shown as tooltips and in the legend).
+export const VERDICT_HELP = {
+  PASS: 'Pass: the player did what it should.',
+  FAIL: 'Fail: something is broken and needs fixing.',
+  WARNING: 'Warning: it works, but something needs attention.',
+  UNKNOWN: 'Unknown: the tool could not decide, usually because the rules are not signed off yet or the page gave too little data.',
+  NOT_APPLICABLE: 'N/A: this check does not apply to this page or device.',
+};
+
 export const verdictLabel = (verdict) => VERDICT_LABELS[verdict] ?? verdict;
 export const verdictTone = (verdict) => VERDICT_TONES[verdict] ?? 'unknown';
 

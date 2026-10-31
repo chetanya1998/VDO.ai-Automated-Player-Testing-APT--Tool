@@ -3,13 +3,18 @@ import NewCheckForm from '../components/checks/NewCheckForm.jsx';
 import CurrentCheck from '../components/checks/CurrentCheck.jsx';
 import HistorySection from '../components/history/HistorySection.jsx';
 import { Alert, StatusPill } from '../components/ui';
-import { getReadiness } from '../api/settings.js';
+import { getReadiness, getSettings } from '../api/settings.js';
 
 export default function HomePage() {
   const [currentJob, setCurrentJob] = useState(null);
   const [running, setRunning] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
   const [prefill, setPrefill] = useState(null);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    getSettings().then((settings) => setVersion(settings.version ?? '')).catch(() => {});
+  }, []);
   const [apiUp, setApiUp] = useState(null);
   const [readiness, setReadiness] = useState(null);
 
@@ -47,13 +52,15 @@ export default function HomePage() {
     : apiUp === false
       ? { tone: 'down', label: 'API unreachable' }
       : readiness?.ready
-        ? { tone: 'ok', label: 'Chromium connected' }
+        ? { tone: 'ok', label: `${readiness.browser?.name ?? 'Browser'} connected` }
         : { tone: 'down', label: apiUp ? 'Setup required' : 'Connecting…' };
 
   const systemItems = [
     { label: 'API', ok: apiUp === true, detail: apiUp === false ? 'Unreachable' : apiUp ? 'Connected' : 'Connecting…' },
     { label: 'Database', ok: Boolean(readiness?.database), detail: readiness ? (readiness.database ? 'PostgreSQL ready' : 'Unavailable') : '—' },
-    { label: 'Chromium', ok: Boolean(readiness?.browser?.launchable), detail: readiness?.browser?.launchable ? `Version ${readiness.browser.version ?? 'ready'}` : readiness ? 'Not launchable' : '—' },
+    { label: readiness?.browser?.name ?? 'Browser', ok: Boolean(readiness?.browser?.launchable), detail: readiness?.browser?.launchable ? `Version ${readiness.browser.version ?? 'ready'}` : readiness ? 'Not launchable' : '—' },
+    // Without MP4/H.264 most video ads cannot play, so ad delivery results are less reliable.
+    { label: 'MP4 video', ok: readiness?.browser?.mp4 === true, detail: readiness?.browser?.mp4 == null ? '—' : readiness.browser.mp4 ? 'Plays MP4/H.264 ads' : 'Cannot play MP4 ads: install Google Chrome', optional: true },
     { label: 'Deep test engine', ok: Boolean(readiness?.deep?.available), detail: readiness?.deep ? (readiness.deep.available ? '23 cases ready' : 'Not built') : '—', optional: true },
     { label: 'Queue', ok: Boolean(readiness && !readiness.queue?.stopping), detail: readiness?.queue ? `${readiness.queue.active} running · ${readiness.queue.queued} queued` : '—' },
   ];
@@ -64,7 +71,7 @@ export default function HomePage() {
         <div>
           <span className="block-eyebrow">vdo.ai · Automated player testing</span>
           <h1>Placement automation</h1>
-          <p>Check custom placement code on real publisher pages, then optionally validate all 23 player test cases.</p>
+          <p>Check custom placement code on real publisher pages, optionally validate all 23 player test cases, or check floating players for sticky violations.</p>
         </div>
         <StatusPill tone={systemPill.tone}>{systemPill.label}</StatusPill>
       </header>
@@ -99,6 +106,8 @@ export default function HomePage() {
         {currentJob && <CurrentCheck key={currentJob.id} job={currentJob} onFinished={handleFinished} />}
         <HistorySection refreshKey={historyKey} onRerun={handleRerun} />
       </main>
+      {/* Which code is running: branch · commit · date (set when started with npm run app). */}
+      {version && <footer className="app-version muted small">Version {version}</footer>}
     </div>
   );
 }

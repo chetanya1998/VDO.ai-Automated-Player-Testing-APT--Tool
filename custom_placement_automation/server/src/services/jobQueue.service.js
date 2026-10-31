@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import config from '../config/index.js';
 import { runPlacementChecks } from './placementRunner.service.js';
 import { runDeepCheck } from './deepValidation.service.js';
+import { STICKY_TYPE, runStickyChecks } from './stickyRunner.service.js';
 import { saveRun } from './results.service.js';
 import logger from '../utils/logger.js';
 import { getDatabase } from './database.service.js';
@@ -42,6 +43,10 @@ function toPublicJob(job) {
     devices: input.devices,
     scroll: input.scroll,
     deep: input.deep === true,
+    refreshIntervalSec: input.refreshIntervalSec ?? null,
+    stickyCode: input.stickyCode ?? null,
+    stickyAdditional: input.stickyAdditional === true,
+    allowOtherDomains: input.allowOtherDomains === true,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
 }
@@ -54,10 +59,22 @@ async function processJob(job) {
 
   try {
     await getDatabase().saveJob(job);
-    const script = await loadScript(input.scriptId);
+    const script = input.scriptId ? await loadScript(input.scriptId) : '';
     // One context per admitted job: a failed device cannot leave a sibling running.
     for (const device of input.devices) {
         if (stopping) throw new Error('Execution interrupted by server shutdown');
+        const onUrlDone = async () => {
+          job.progress.done += 1;
+          await getDatabase().saveJob(job);
+          if (stopping) throw new Error('Execution interrupted by server shutdown');
+        };
+        // Sticky violation checker: its own scenario instead of the placement check.
+        if (input.type === STICKY_TYPE) {
+          const run = await runStickyChecks({ tag: input.tag, device, urls: input.urls, script, codeType: input.stickyCode ?? 'none', includeAdditional: input.stickyAdditional === true, onUrlDone });
+          job.runs.push(await saveRun(input, run));
+          await getDatabase().saveJob(job);
+          continue;
+        }
         const run = await runPlacementChecks({
           type: input.type,
           tag: input.tag,
@@ -65,18 +82,14 @@ async function processJob(job) {
           urls: input.urls,
           script,
           scroll: input.scroll,
-          onUrlDone: async () => {
-            job.progress.done += 1;
-            await getDatabase().saveJob(job);
-            if (stopping) throw new Error('Execution interrupted by server shutdown');
-          },
+          onUrlDone,
         });
 
-        // Deep test: after the unchanged placement check, run all 23 cases for each URL.
-        if (input.deep) {
+        // Deep test and/or refresh check: after the unchanged placement check, one extra browser visit per URL.
+        if (input.deep || input.refreshIntervalSec) {
           for (const result of run.results) {
             if (stopping) throw new Error('Execution interrupted by server shutdown');
-            result.deep = await runDeepCheck({
+            const deep = await runDeepCheck({
               url: result.url,
               domain: input.domain,
               tag: input.tag,
@@ -84,7 +97,16 @@ async function processJob(job) {
               type: input.type,
               script,
               scroll: input.scroll,
+              refreshIntervalSec: input.refreshIntervalSec ?? null,
             });
+            const { extraChecks = [], ...summary } = deep.summary;
+            // The safe frame check belongs to the deep test; the refresh check is its own option.
+            result.extraChecks = extraChecks.filter((check) => input.deep || check.id === 'SLOT_REFRESH');
+            if (input.deep) {
+              result.deep = summary;
+              // Saved as files with the run, like the placement screenshots.
+              result.deepScreenshots = deep.screenshots;
+            }
             job.progress.done += 1;
             await getDatabase().saveJob(job);
           }
@@ -129,7 +151,7 @@ export async function enqueueJob(input) {
     id: crypto.randomUUID(),
     input: storedInput,
     status: JOB_STATUS.QUEUED,
-    progress: { done: 0, total: input.urls.length * input.devices.length * (input.deep ? 2 : 1) },
+    progress: { done: 0, total: input.urls.length * input.devices.length * (input.deep || input.refreshIntervalSec ? 2 : 1) },
     runs: [],
     error: null,
     createdAt: new Date().toISOString(),

@@ -22,6 +22,7 @@ router.get('/ready', async (_req, res) => {
 });
 router.get('/settings', (_req, res) =>
   res.json({
+    version: config.version,
     urlTimeoutMs: config.placement.urlTimeoutMs,
     deepUrlTimeoutMs: config.deep.urlTimeoutMs,
     scroll: {

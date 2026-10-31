@@ -122,11 +122,15 @@ export function validateArticles(input: ArticleValidationInput): CheckResult[] {
   const websiteCounts = logicalEpochs.map((epoch) => ({
     articleEpochId: epoch.articleEpochId,
     articleUrl: epoch.url,
-    count: events.filter((event) => event.articleEpochId === epoch.articleEpochId && input.activeTags.includes(event.tagName ?? "") && event.canonicalEvent === "website_pageview").length,
+    // Website-level events (Tech Doc): one per page whichever tag fires them, so every tag on the page counts.
+    count: events.filter((event) => event.articleEpochId === epoch.articleEpochId && event.canonicalEvent === "website_pageview").length,
+    matchCount: events.filter((event) => event.articleEpochId === epoch.articleEpochId && event.canonicalEvent === "website_pageview_match").length,
   }));
   const websiteFailures = websiteCounts.filter((item) => item.count < input.eventPolicy.pageview.websiteMinimum || item.count > input.eventPolicy.pageview.websiteMaximum);
-  const pageviewProven = counts.some((item) => item.pageview > input.eventPolicy.pageview.perTag) || websiteFailures.some((item) => item.count > input.eventPolicy.pageview.websiteMaximum);
-  const tc7 = result(input, "TC-7", verdict(input, [...pageviewFailures, ...websiteFailures.map((item) => `${item.articleUrl}: website_pageview=${item.count}`)], pageviewProven), input.eventPolicy.pageview, { perArticleTag: counts.map(({ evidenceIds: _, ...item }) => item), websitePageviews: websiteCounts, failures: [...pageviewFailures, ...websiteFailures.map((item) => `${item.articleUrl}: website_pageview=${item.count}`)] }, counts.flatMap((item) => item.evidenceIds).length > 0 ? counts.flatMap((item) => item.evidenceIds) : allEvidenceIds);
+  const websiteMatchFailures = websiteCounts.filter((item) => item.matchCount > input.eventPolicy.pageview.websiteMaximum);
+  const pageviewProven = counts.some((item) => item.pageview > input.eventPolicy.pageview.perTag) || websiteFailures.some((item) => item.count > input.eventPolicy.pageview.websiteMaximum) || websiteMatchFailures.length > 0;
+  const tc7Failures = [...pageviewFailures, ...websiteFailures.map((item) => `${item.articleUrl}: website_pageview=${item.count}`), ...websiteMatchFailures.map((item) => `${item.articleUrl}: website_pageview_match=${item.matchCount}`)];
+  const tc7 = result(input, "TC-7", verdict(input, tc7Failures, pageviewProven), input.eventPolicy.pageview, { perArticleTag: counts.map(({ evidenceIds: _, ...item }) => item), websitePageviews: websiteCounts, failures: tc7Failures }, counts.flatMap((item) => item.evidenceIds).length > 0 ? counts.flatMap((item) => item.evidenceIds) : allEvidenceIds);
 
   const lifecycleFailures = counts.flatMap((item) => [
     ...(item.loaded === input.eventPolicy.pageview.loadedPerTag ? [] : [`${item.articleUrl}/${item.tagName}: loaded=${item.loaded}`]),

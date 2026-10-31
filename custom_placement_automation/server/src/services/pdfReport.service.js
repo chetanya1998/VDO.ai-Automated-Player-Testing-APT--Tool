@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import config from '../config/index.js';
+import { launchOptions } from './browser.service.js';
 import { SCREENSHOTS_URL_PATH, getRun } from './results.service.js';
 import logger from '../utils/logger.js';
 
@@ -14,15 +15,19 @@ const REASON_LABELS = {
   wrapper_hidden: 'Wrapper hidden',
   timeout: 'Page load timed out',
   page_closed: 'Page closed during check',
+  player_not_found: 'vdo.ai player not found',
+  review_required: 'Review required',
+  not_judged: 'Could not be judged',
+  page_open_failed: 'Page could not be opened',
 };
 
 let pdfBrowserPromise = null;
 
 function getPdfBrowser() {
   if (!pdfBrowserPromise) {
-    logger.info('Launching headless Chromium for PDF reports');
+    logger.info('Launching headless browser for PDF reports');
     pdfBrowserPromise = chromium
-      .launch({ channel: 'chromium', headless: true, timeout: 10000 })
+      .launch({ ...launchOptions(), headless: true, timeout: 10000 })
       .then((browser) => {
         browser.on('disconnected', () => {
           pdfBrowserPromise = null;
@@ -43,6 +48,20 @@ export async function closePdfBrowser() {
   pdfBrowserPromise = null;
   await browser?.close();
 }
+
+// Staging / preview URLs: hosts outside the publisher domain, allowed for this run.
+const otherDomainsText = (run) => {
+  const hosts = [...new Set((run.offDomainUrls ?? []).map((value) => { try { return new URL(value).hostname; } catch { return value; } }))];
+  return hosts.length
+    ? `Allowed (staging / preview): ${run.offDomainUrls.length} URL${run.offDomainUrls.length === 1 ? '' : 's'} on ${hosts.join(', ')}; the publisher domain ${run.domain} is still used for tag checks`
+    : 'Allowed, but every URL was on the publisher domain';
+};
+const offDomainBadge = (run, result) => {
+  if (!result.offDomain) return '';
+  let host = '';
+  try { host = new URL(result.url).hostname; } catch { /* keep empty */ }
+  return `<span class="badge warn">Staging / preview URL${host ? `: ${escapeHtml(host)}` : ''}</span>`;
+};
 
 const escapeHtml = (value) =>
   String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -79,35 +98,162 @@ const VERDICT_CLASS = { PASS: 'pass', FAIL: 'fail', WARNING: 'warn', UNKNOWN: 'u
 const VERDICT_LABEL = { PASS: 'Pass', FAIL: 'Fail', WARNING: 'Warning', UNKNOWN: 'Unknown', NOT_APPLICABLE: 'N/A' };
 const VERDICT_ORDER = ['PASS', 'FAIL', 'WARNING', 'UNKNOWN', 'NOT_APPLICABLE'];
 
-function renderVerdictCounts(counts) {
-  return `<div class="deep-counts">${VERDICT_ORDER.map(
-    (verdict) => `<span class="v ${VERDICT_CLASS[verdict]}"><b>${counts?.[verdict] ?? 0}</b> ${VERDICT_LABEL[verdict]}</span>`,
-  ).join('')}</div>`;
+const VERDICT_HELP = {
+  PASS: 'the player did what it should',
+  FAIL: 'something is broken and needs fixing',
+  WARNING: 'it works, but something needs attention',
+  UNKNOWN: 'the tool could not decide, usually because the rules are not signed off yet or the page gave too little data',
+  NOT_APPLICABLE: 'the check does not apply to this page or device',
+};
+const GENERIC_REASON = 'Observed behaviour matched the rule.';
+
+// One box per result type, so the totals read separately.
+function renderVerdictTiles(counts, total, verdicts = VERDICT_ORDER) {
+  const sum = total ?? verdicts.reduce((n, verdict) => n + (counts?.[verdict] ?? 0), 0);
+  return `<div class="tiles">${verdicts.map((verdict) => {
+    const value = counts?.[verdict] ?? 0;
+    return `<div class="tile ${VERDICT_CLASS[verdict]}${value === 0 ? ' zero' : ''}"><b>${value}</b><span>${VERDICT_LABEL[verdict]}</span><small>${sum ? Math.round((value / sum) * 100) : 0}%</small></div>`;
+  }).join('')}</div>`;
 }
 
-function renderDeep(deep) {
+const renderLegend = () =>
+  `<p class="legend">${VERDICT_ORDER.map((verdict) => `<b class="${VERDICT_CLASS[verdict]}">${VERDICT_LABEL[verdict]}</b>: ${VERDICT_HELP[verdict]}`).join(' · ')}</p>`;
+
+// Deep test results per URL: 23 test cases each, never added across URLs or to the placement counts.
+function renderDeepPerUrl(run) {
+  const rows = run.results.filter((result) => result.deep);
+  if (rows.length === 0) return '';
+  return `<h2 class="section-title">Deep test · 23 test cases per URL</h2>
+  <p class="section-note">Counted separately for each URL. Details for every test case follow under each URL.</p>
+  <table class="cases per-url"><thead><tr><th>URL</th><th>Overall</th>${VERDICT_ORDER.map((verdict) => `<th class="num ${VERDICT_CLASS[verdict]}">${VERDICT_LABEL[verdict]}</th>`).join('')}</tr></thead><tbody>${rows
+    .map((result, i) => `<tr><td class="url-cell">#${i + 1} ${escapeHtml(result.url)}</td><td><span class="badge ${VERDICT_CLASS[result.deep.overallVerdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[result.deep.overallVerdict] ?? result.deep.overallVerdict)}</span></td>${VERDICT_ORDER.map((verdict) => `<td class="num ${VERDICT_CLASS[verdict]}"><b>${result.deep.verdictCounts?.[verdict] ?? 0}</b>/23</td>`).join('')}</tr>`)
+    .join('')}</tbody></table>
+  ${renderLegend()}`;
+}
+
+function renderCase(c) {
+  const reason = c.summary && c.summary !== GENERIC_REASON && c.summary !== c.meaning ? c.summary : '';
+  return `<tr class="${VERDICT_CLASS[c.verdict] ?? 'unknown'}">
+    <td class="case-id">${escapeHtml(c.testCaseId)}<span class="badge ${VERDICT_CLASS[c.verdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td>
+    <td><b>${escapeHtml(c.title)}</b>${c.checks ? `<div class="plain"><i>What it tests:</i> ${escapeHtml(c.checks)}</div>` : ''}</td>
+    <td>${
+      // The legend already explains Unknown, so state the page's reason directly instead of repeating it.
+      c.verdict === 'UNKNOWN' && reason
+        ? `Could not decide: ${escapeHtml(reason)}`
+        : `${escapeHtml(c.meaning ?? c.summary)}${reason ? `<div class="plain"><i>On this page:</i> ${escapeHtml(reason)}</div>` : ''}`
+    }</td>
+  </tr>`;
+}
+
+function renderDeep(deep, deepImages = []) {
   if (!deep) return '';
   const causes = deep.probableCauses ?? [];
+  const evaluated = deep.cases?.length ?? 0;
   return `
     <div class="deep">
-      <h3>Deep test · 23 cases <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
-      ${renderVerdictCounts(deep.verdictCounts)}
+      <h3>Deep test · ${evaluated ? `${deep.verdictCounts?.PASS ?? 0} of ${evaluated} test cases passed` : '23 test cases not evaluated'} <span class="badge ${VERDICT_CLASS[deep.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(VERDICT_LABEL[deep.overallVerdict] ?? deep.overallVerdict)}</span></h3>
+      ${renderVerdictTiles(deep.verdictCounts, evaluated || undefined)}
+      ${deepImages.length ? `<p class="deep-h">Screenshots from the deep test (your custom code applied)</p><div class="shots">${deepImages.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
       ${
-        deep.cases?.length
-          ? `<table class="cases"><thead><tr><th>Case</th><th>Check</th><th>Result</th><th>Why</th></tr></thead><tbody>${deep.cases
-              .map(
-                (c) => `<tr><td>${escapeHtml(c.testCaseId)}</td><td>${escapeHtml(c.title)}</td><td><span class="badge ${VERDICT_CLASS[c.verdict] ?? 'unknown'}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td><td>${escapeHtml(c.summary)}</td></tr>`,
-              )
-              .join('')}</tbody></table>`
+        evaluated
+          ? `<table class="cases"><thead><tr><th>Test case</th><th>What it tests</th><th>What the result means</th></tr></thead><tbody>${deep.cases.map(renderCase).join('')}</tbody></table>`
           : ''
       }
-      ${causes.length ? `<p class="deep-h">Likely causes${causes[0].rules === 'draft' ? ' (draft RCA rules)' : ''}</p><ul class="hints">${causes.map((c) => `<li>${escapeHtml(c.testCaseId)}: ${escapeHtml(c.summary)} · owner: ${escapeHtml(c.owner)}</li>`).join('')}</ul>` : ''}
+      ${causes.length ? `<p class="deep-h">Likely causes${causes[0].rules === 'draft' ? ' (draft rules)' : ''}</p><ul class="hints">${causes.map((c) => `<li>${escapeHtml(c.testCaseId)}: ${escapeHtml(c.summary)} · owner: ${escapeHtml(c.owner)}</li>`).join('')}</ul>` : ''}
       ${deep.executionErrors?.length ? `<p class="deep-h">Errors</p><ul class="hints">${deep.executionErrors.map((e) => `<li>${escapeHtml(e.message)}</li>`).join('')}</ul>` : ''}
-      ${deep.limitations?.length ? `<p class="deep-h">Limitations</p><ul class="notes">${deep.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
+      ${deep.limitations?.length ? `<p class="deep-h">What this run could not confirm</p><ul class="notes">${deep.limitations.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
     </div>`;
 }
 
-function renderResult(run, result, index, images) {
+const EXTRA_DETAIL_LABELS = {
+  safeFramesLoaded: 'SafeFrames loaded on the page',
+  insidePlayer: 'SafeFrame inside the player',
+  shownInPlayer: 'Shown with a real size',
+  keptSeparateFromPage: 'Kept separate from the page',
+  size: 'Ad size (px)',
+  onScreen: 'Visible on screen',
+  otherSafeFramesOnPage: 'Other SafeFrame ads on the page',
+  failedToLoad: 'Failed to load',
+  intervalSec: 'Chosen interval (s)',
+  adRequestSource: 'Ad requests read from',
+  adCycles: 'Ad cycles seen',
+  secondsBetweenAdCycles: 'Seconds between ad cycles',
+  watchedWithPlayerInViewSec: 'Watched with the player in view (s)',
+};
+const showDetail = (value) => (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : Array.isArray(value) ? value.join(', ') || '—' : String(value));
+
+// Safe frame and refresh checks: listed on their own, never counted in the 23-case totals.
+function renderExtraChecks(checks = []) {
+  if (!checks.length) return '';
+  return `
+    <div class="deep extra">
+      <h3>Additional checks <span class="muted-note">(not part of the 23 test cases)</span></h3>
+      <table class="cases"><thead><tr><th>Check</th><th>What it looks at</th><th>Result on this page</th></tr></thead><tbody>${checks
+        .map((check) => {
+          const tone = VERDICT_CLASS[check.verdict] ?? 'unknown';
+          const details = Object.entries(check.details ?? {}).map(([key, value]) => `${escapeHtml(EXTRA_DETAIL_LABELS[key] ?? key)}: ${escapeHtml(showDetail(value))}`).join(' · ');
+          return `<tr class="${tone}">
+            <td class="case-id">${escapeHtml(check.title)}<span class="badge ${tone}">${escapeHtml(VERDICT_LABEL[check.verdict] ?? check.verdict)}</span></td>
+            <td>${escapeHtml(check.checks || '—')}</td>
+            <td><b>${escapeHtml(check.summary)}</b><div class="plain">${escapeHtml(check.meaning)}</div>${details ? `<div class="plain"><i>Details:</i> ${details}</div>` : ''}</td>
+          </tr>`;
+        })
+        .join('')}</tbody></table>
+    </div>`;
+}
+
+// Sticky violation checker: 25 checks per URL (ST-01..ST-12 core, ST-13..ST-25 additional).
+function renderStickyCase(c) {
+  const tone = VERDICT_CLASS[c.verdict] ?? 'unknown';
+  return `<tr class="${tone}">
+    <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(VERDICT_LABEL[c.verdict] ?? c.verdict)}</span></td>
+    <td><b>${escapeHtml(c.title)}</b><div class="plain"><i>What it tests:</i> ${escapeHtml(c.checks)}</div><div class="plain"><i>Expected:</i> ${escapeHtml(c.expected)}</div></td>
+    <td><b>${escapeHtml(c.summary)}</b>${Number.isInteger(c.evidence) ? `<div class="plain"><i>Evidence:</i> screenshot #${c.evidence + 1}${c.seenAt ? ` (${escapeHtml(c.seenAt)})` : ''}</div>` : c.seenAt ? `<div class="plain"><i>Seen at:</i> ${escapeHtml(c.seenAt)}</div>` : ''}</td>
+  </tr>`;
+}
+
+// Overall from the share of judged checks that passed: ≥ 80% PASS, 50–80% PASS · Review required, < 50% FAIL.
+const stickyOverall = (sticky) => (sticky.overallVerdict === 'PASS' && sticky.review ? 'PASS · Review required' : sticky.overallVerdict === 'WARNING' ? 'Could not be judged' : sticky.overallVerdict);
+
+function renderStickyResult(run, result, index, images) {
+  const sticky = result.sticky;
+  const table = (group, heading) => {
+    const rows = (sticky?.cases ?? []).filter((c) => c.group === group);
+    return rows.length ? `<p class="deep-h">${heading}</p><table class="cases"><thead><tr><th>Check</th><th>What it tests</th><th>Result on this page</th></tr></thead><tbody>${rows.map(renderStickyCase).join('')}</tbody></table>` : '';
+  };
+  const facts = sticky
+    ? [
+        ['Player type', sticky.playerType],
+        ['Floating started', sticky.floatingStartedAt ? `${sticky.floatingStartedAt.label} (scrolled ${sticky.floatingStartedAt.scrollY} px)` : 'never'],
+        ['Viewport', sticky.viewport ? `${sticky.viewport.width}×${sticky.viewport.height}` : '—'],
+        ['Browser', sticky.browserVersion ?? '—'],
+        ['Checks run', sticky.includeAdditional ? 'ST-01 to ST-25 (mandatory + additional)' : 'ST-01 to ST-13 (mandatory)'],
+        ['Judged checks passed', sticky.passShare === null || sticky.passShare === undefined ? '— (none could be judged)' : `${sticky.verdictCounts.PASS} of ${sticky.verdictCounts.PASS + sticky.verdictCounts.FAIL} (${Math.round(sticky.passShare * 100)}%)`],
+        ['Snapshots taken', String(sticky.snapshots)],
+        ['Duration', formatSeconds(result.durationMs)],
+      ]
+    : [['Duration', formatSeconds(result.durationMs)], ...(result.error ? [['Error', result.error]] : [])];
+  return `
+  <section class="result ${result.status} has-deep">
+    <header>
+      <span class="badge ${result.status}">Sticky: ${result.status.toUpperCase()}</span>
+      ${sticky ? `<span class="badge ${VERDICT_CLASS[sticky.overallVerdict] ?? 'unknown'}">Overall ${escapeHtml(stickyOverall(sticky))}</span><span class="badge unknown">${sticky.verdictCounts.PASS} pass · ${sticky.verdictCounts.FAIL} fail · ${sticky.verdictCounts.WARNING} warning</span>` : ''}
+      ${offDomainBadge(run, result)}
+      <span class="index">#${index + 1}</span>
+      <span class="url">${escapeHtml(result.url)}</span>
+    </header>
+    ${result.reasons.length ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>` : ''}
+    <dl>${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+    ${sticky ? renderVerdictTiles(sticky.verdictCounts, sticky.total ?? 25, ['PASS', 'FAIL', 'WARNING']) : ''}
+    ${images.length ? `<div class="shots"><p class="deep-h shots-h">${sticky ? 'Evidence screenshots (blue = vdo.ai player, red = problem area); each check below names its screenshot' : 'What the site showed'}</p>${images.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
+    ${table('core', 'Mandatory checks (ST-01 to ST-13)')}
+    ${table('additional', 'Additional checks (ST-14 to ST-25)')}
+    ${sticky?.notes?.length ? `<p class="deep-h">Notes</p><ul class="notes">${sticky.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>` : ''}
+  </section>`;
+}
+
+function renderResult(run, result, index, images, deepImages) {
+  if (run.type === 'sticky') return renderStickyResult(run, result, index, images);
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
   const facts = [
@@ -119,13 +265,16 @@ function renderResult(run, result, index, images) {
     ...(result.error ? [['Error', result.error]] : []),
   ];
 
+  const hasMore = Boolean(result.deep || result.extraChecks?.length);
   return `
-  <section class="result ${result.status}${result.deep ? ' has-deep' : ''}">
+  <section class="result ${result.status}${hasMore ? ' has-deep' : ''}">
     <header>
-      <span class="badge ${result.status}">${result.status.toUpperCase()}</span>
+      <span class="badge ${result.status}">Placement: ${result.status.toUpperCase()}</span>
+      ${offDomainBadge(run, result)}
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
     </header>
+    ${hasMore ? '<p class="part-h">Custom placement check</p>' : ''}
     ${
       result.reasons.length
         ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>`
@@ -148,22 +297,33 @@ function renderResult(run, result, index, images) {
             .join('')}</div>`
         : ''
     }
-    ${renderDeep(result.deep)}
+    ${renderDeep(result.deep, deepImages)}
+    ${renderExtraChecks(result.extraChecks)}
   </section>`;
 }
 
-function renderReport(run, imagesByResult) {
+function renderReport(run, imagesByResult, deepImagesByResult) {
   const status = runStatus(run);
   const meta = [
     ['Domain', run.domain],
-    ['Check type', run.type ?? 'vdo.ai.js'],
+    ['Check type', run.type === 'sticky' ? 'Sticky violation check (ST-01 to ST-25)' : run.type ?? 'vdo.ai.js'],
     ['Device', run.device],
     ['Started', formatDateTime(run.startedAt)],
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
-    ['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default'],
-    ['Deep test', run.deep ? 'On (all 23 cases per URL)' : 'Off'],
+    ...(run.allowOtherDomains ? [['URLs on other domains', otherDomainsText(run)]] : []),
+    ...(run.type === 'sticky' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
+    ...(run.type === 'sticky'
+      ? [
+          ['Code applied', run.stickyCode === 'none' || !run.stickyCode ? 'None (live tag as served)' : run.stickyCode],
+          ['Additional checks', run.stickyAdditional ? 'Included (ST-14 to ST-25)' : 'Not included (mandatory ST-01 to ST-13 only)'],
+        ]
+      : [
+          ['Deep test', run.deep ? 'On (all 23 cases per URL, plus the safe frame check)' : 'Off'],
+          ['Ad slot refresh check', run.refreshIntervalSec ? `On (every ${run.refreshIntervalSec} s)` : 'Off'],
+        ]),
   ];
+  const sticky = run.type === 'sticky';
 
   return `<!doctype html>
 <html lang="en">
@@ -178,7 +338,16 @@ function renderReport(run, imagesByResult) {
   .meta { display: grid; grid-template-columns: max-content 1fr max-content 1fr; gap: 3px 14px; margin: 0 0 14px; padding: 10px 12px; background: #f4f6f8; border-radius: 6px; }
   .meta dt { color: #5c6570; }
   .meta dd { margin: 0; overflow-wrap: anywhere; }
-  .section-title { font-size: 13px; margin: 0 0 6px; }
+  .section-title { font-size: 13px; margin: 0 0 2px; }
+  .deep.extra { break-inside: avoid; }
+  .shots-h { grid-column: 1 / -1; margin: 0; }
+  .muted-note { font-weight: 400; font-size: 10px; color: #5c6570; }
+  .part-h { margin: 2px 0 4px; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5c6570; }
+  .section-note { margin: 0 0 6px; color: #5c6570; font-size: 9.5px; }
+  table.per-url { margin-bottom: 6px; }
+  table.per-url th.num, table.per-url td.num { text-align: right; white-space: nowrap; }
+  table.per-url td.num.pass b { color: #1a7f37; } table.per-url td.num.fail b { color: #c62828; } table.per-url td.num.warn b { color: #9a6700; }
+  table.per-url .url-cell { overflow-wrap: anywhere; }
   .summary { display: flex; gap: 10px; margin-bottom: 16px; }
   .summary div { flex: 1; padding: 8px 10px; border: 1px solid #dde1e6; border-radius: 6px; }
   .summary b { display: block; font-size: 16px; }
@@ -211,6 +380,25 @@ function renderReport(run, imagesByResult) {
   .deep-counts .v { padding: 2px 8px; border-radius: 999px; background: #f4f6f8; font-size: 9.5px; }
   .deep-counts .v.pass b { color: #1a7f37; } .deep-counts .v.fail b { color: #c62828; } .deep-counts .v.warn b { color: #9a6700; }
   table.cases { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 8px; }
+  .tile { border: 1px solid #dde1e6; border-top: 3px solid #98a2b3; border-radius: 6px; padding: 5px 8px; break-inside: avoid; }
+  .tile b { display: block; font-size: 17px; line-height: 1.2; }
+  .tile span { display: block; font-weight: 600; font-size: 10px; }
+  .tile small { color: #5c6570; font-size: 9px; }
+  .tile.pass { border-top-color: #1a7f37; } .tile.pass b { color: #1a7f37; }
+  .tile.fail { border-top-color: #c62828; } .tile.fail b { color: #c62828; }
+  .tile.warn { border-top-color: #9a6700; } .tile.warn b { color: #9a6700; }
+  .tile.unknown { border-top-color: #667085; } .tile.unknown b { color: #475467; }
+  .tile.na { border-top-color: #c0c6ce; }
+  .tile.zero { opacity: 0.55; }
+  .legend { margin: 0 0 14px; color: #5c6570; font-size: 9.5px; }
+  .legend b.pass { color: #1a7f37; } .legend b.fail { color: #c62828; } .legend b.warn { color: #9a6700; }
+  table.cases td.case-id { width: 62px; }
+  table.cases td.case-id .badge { display: inline-block; margin-top: 3px; }
+  table.cases .plain { color: #5c6570; margin-top: 2px; }
+  table.cases tr.fail td:first-child { border-left: 3px solid #c62828; }
+  table.cases tr.warn td:first-child { border-left: 3px solid #9a6700; }
+  table.cases tr.pass td:first-child { border-left: 3px solid #1a7f37; }
   table.cases th, table.cases td { text-align: left; vertical-align: top; padding: 3px 5px; border-bottom: 1px solid #eef0f3; }
   table.cases th { color: #5c6570; font-weight: 600; }
   table.cases tr { break-inside: avoid; }
@@ -219,17 +407,19 @@ function renderReport(run, imagesByResult) {
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${status.toUpperCase()}</span></h1>
-  <div class="sub">Placement report · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
+  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${sticky ? 'Sticky violation check' : 'Placement check'}: ${status.toUpperCase()}</span></h1>
+  <div class="sub">${sticky ? 'Sticky violation report' : 'Placement report'} · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
   <dl class="meta">${meta.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+  <h2 class="section-title">${sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : 'Custom placement check'}</h2>
+  <p class="section-note">${sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings, which could not be judged, are left out): 80% or more passed = PASS, 50% to under 80% = PASS · Review required, under 50% = FAIL. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
   <div class="summary">
-    <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs</div>
-    <div class="pass"><b>${run.passCount}</b>Pass</div>
-    <div class="fail"><b>${run.failCount}</b>Fail</div>
-    <div class="error"><b>${run.errorCount}</b>Error</div>
+    <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs checked</div>
+    <div class="pass"><b>${run.passCount}</b>URLs passed${sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}</div>
+    <div class="fail"><b>${run.failCount}</b>URLs failed</div>
+    <div class="error"><b>${run.errorCount}</b>URLs with errors</div>
   </div>
-  ${run.deep && run.deepSummary ? `<h2 class="section-title">Deep test totals · ${run.deepSummary.urls} URL(s) × 23 cases</h2>${renderVerdictCounts(run.deepSummary.verdictCounts)}` : ''}
-  ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i])).join('')}
+  ${run.deep ? renderDeepPerUrl(run) : ''}
+  ${run.results.map((result, i) => renderResult(run, result, i, imagesByResult[i], deepImagesByResult[i])).join('')}
 </body>
 </html>`;
 }
@@ -246,10 +436,20 @@ export async function renderRunPdf(runId) {
     }),
   );
 
+  const deepImagesByResult = await Promise.all(
+    run.results.map(async (result) => {
+      const labels = result.deep?.screenshotLabels ?? [];
+      const images = await Promise.all(
+        (result.deep?.screenshots ?? []).map(async (url, i) => ({ src: await readScreenshot(url), label: labels[i] ?? `Deep test screenshot ${i + 1}` })),
+      );
+      return images.filter((img) => img.src);
+    }),
+  );
+
   const browser = await getPdfBrowser();
   const page = await browser.newPage();
   try {
-    await page.setContent(renderReport(run, imagesByResult), { waitUntil: 'load' });
+    await page.setContent(renderReport(run, imagesByResult, deepImagesByResult), { waitUntil: 'load' });
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,

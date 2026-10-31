@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { chromium } from 'playwright';
 import config from '../config/index.js';
-import { deviceContextOptions } from './browser.service.js';
+import { browserChoice, deviceContextOptions } from './browser.service.js';
 import logger from '../utils/logger.js';
 
 // The 23 validators live in the repository's TypeScript validator. Deep tests load its compiled
 // build (pnpm build in the repository root) instead of re-implementing the rules here.
 let enginePromise = null;
+
+// Same intervals as the engine's refresh check; kept here so requests validate without loading the engine.
+export const REFRESH_INTERVALS_SEC = [30, 45, 60];
 
 const engineMissingMessage = () =>
   `Deep test engine is not built. Run "pnpm install && pnpm build" in the repository root (${config.deep.repoRoot}), then retry.`;
@@ -33,7 +35,13 @@ export async function deepReadiness() {
   }
 }
 
-function errorSummary(url, device, error) {
+// Extra checks that could not run are shown as not evaluated rather than left out.
+function unevaluatedExtraChecks(refreshIntervalSec, message) {
+  const unknown = (id, title) => ({ id, title, checks: '', meaning: 'The check could not run for this URL.', verdict: 'UNKNOWN', summary: message, details: {} });
+  return [unknown('SAFE_FRAME', 'Safe frame check'), ...(refreshIntervalSec ? [unknown('SLOT_REFRESH', `Ad slot refresh (every ${refreshIntervalSec} s)`)] : [])];
+}
+
+function errorSummary(url, device, error, refreshIntervalSec) {
   return {
     schemaVersion: 1,
     targetUrl: url,
@@ -45,18 +53,21 @@ function errorSummary(url, device, error) {
     probableCauses: [],
     executionErrors: [{ stage: 'run', message: error.message.split('\n')[0] }],
     limitations: ['The deep test could not run for this URL, so none of the 23 cases were evaluated.'],
+    extraChecks: unevaluatedExtraChecks(refreshIntervalSec, error.message.split('\n')[0]),
   };
 }
 
-export async function runDeepCheck({ url, domain, tag, device, type, script, scroll }) {
+export async function runDeepCheck({ url, domain, tag, device, type, script, scroll, refreshIntervalSec = null }) {
   try {
     const engine = await loadEngine();
-    const { summary } = await engine.runDeepValidation({
+    const browser = browserChoice();
+    if (!browser.executablePath) throw new Error('Google Chrome was not found. Install Chrome, set CHROME_PATH, or set BROWSER_CHANNEL=auto.');
+    const { summary, screenshots } = await engine.runDeepValidation({
       targetUrl: url,
       domain,
       tagName: tag,
       device: { id: device, kind: device === 'mobile' ? 'mobile' : 'desktop', contextOptions: deviceContextOptions(device) },
-      browserExecutablePath: chromium.executablePath(),
+      browserExecutablePath: browser.executablePath,
       code: { type, body: script },
       scroll,
       observeAfterLoadMs: config.deep.observeMs,
@@ -64,14 +75,33 @@ export async function runDeepCheck({ url, domain, tag, device, type, script, scr
       totalTimeoutMs: config.deep.urlTimeoutMs,
       configDirectory: path.join(config.deep.repoRoot, 'config'),
       allowPrivateNetwork: config.deep.allowPrivateNetwork,
+      ...(refreshIntervalSec ? { refresh: { intervalSec: refreshIntervalSec } } : {}),
     });
     logger.info(`[DEEP ${summary.overallVerdict}] ${url} (${device}) ${JSON.stringify(summary.verdictCounts)}`);
-    return summary;
+    return { summary, screenshots: screenshots ?? [] };
   } catch (error) {
     logger.error(`Deep test failed for ${url} (${device})`, error);
-    return errorSummary(url, device, error);
+    return { summary: errorSummary(url, device, error, refreshIntervalSec), screenshots: [] };
   }
 }
+
+// Runs saved before plain-language explanations existed get them from the engine when they are opened.
+export async function addPlainLanguage(run) {
+  if (!run?.results?.some((result) => result.deep?.cases?.some((item) => !item.checks || !item.meaning))) return run;
+  let engine;
+  try { engine = await loadEngine(); } catch { return run; }
+  for (const result of run.results) {
+    for (const item of result.deep?.cases ?? []) {
+      item.checks ??= engine.CASE_GUIDE[item.testCaseId]?.checks ?? '';
+      item.meaning ??= engine.resultMeaning(item.testCaseId, item.verdict);
+    }
+  }
+  return run;
+}
+
+// Deep results per URL, kept apart from the placement check's per-URL pass/fail.
+export const deepPerUrl = (results) =>
+  results.filter((result) => result.deep).map((result) => ({ url: result.url, overallVerdict: result.deep.overallVerdict, verdictCounts: result.deep.verdictCounts }));
 
 // Run-level totals so history rows can show deep results without loading every case.
 export function summarizeDeepRun(results) {
@@ -82,5 +112,5 @@ export function summarizeDeepRun(results) {
     urls += 1;
     for (const [verdict, count] of Object.entries(result.deep.verdictCounts ?? {})) totals[verdict] = (totals[verdict] ?? 0) + count;
   }
-  return { urls, cases: urls * 23, verdictCounts: totals };
+  return { urls, cases: urls * 23, verdictCounts: totals, perUrl: deepPerUrl(results) };
 }

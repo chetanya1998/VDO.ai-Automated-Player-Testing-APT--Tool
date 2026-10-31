@@ -25,6 +25,8 @@ const config = {
   port: Number(process.env.PORT) || 3000,
   host: '127.0.0.1',
   databaseUrl: process.env.DATABASE_URL,
+  // Branch · commit · date, set by `npm run app` and shown in the dashboard footer.
+  version: process.env.APP_VERSION || '',
   env: process.env.NODE_ENV || 'development',
 
   clientDistDir: fs.existsSync(path.join(clientDistDir, 'index.html')) ? clientDistDir : null,
@@ -38,6 +40,9 @@ const config = {
   browser: {
     headless: process.env.HEADLESS === 'true',
     navigationTimeoutMs: Number(process.env.NAVIGATION_TIMEOUT_MS) || 30000,
+    // auto: Google Chrome when installed (it plays MP4/H.264 video), otherwise Playwright's Chromium.
+    channel: ['auto', 'chrome', 'chromium'].includes(process.env.BROWSER_CHANNEL) ? process.env.BROWSER_CHANNEL : 'auto',
+    chromePath: process.env.CHROME_PATH || '',
   },
 
   placement: {
@@ -67,6 +72,11 @@ const config = {
     urlTimeoutMs: envNumber('DEEP_URL_TIMEOUT_MS', 90000),
     // Off by default: deep tests refuse private-network addresses unless staging pages need them.
     allowPrivateNetwork: process.env.DEEP_ALLOW_PRIVATE_NETWORK === 'true',
+  },
+
+  sticky: {
+    // One URL walks through load, scrolling, ad wait, resizing and closing; about 1–2 minutes on a real page.
+    urlTimeoutMs: envNumber('STICKY_URL_TIMEOUT_MS', 180000),
   },
 
   checks: {

@@ -38,6 +38,20 @@ All 23 cases are now connected to the placement dashboard as an opt-in **deep te
 
 Verified locally against the repository's synthetic fixture pages (desktop and mobile emulation) through the real queue, PostgreSQL, dashboard and PDF. Not yet verified against a live publisher page, and the repository policies are drafts, so policy-dependent cases report UNKNOWN.
 
+### Rules aligned with the Tech Doc (27 October 2026)
+
+- Real logger event names (`loaded`, `error`, `blocked_ima`, `Website PageView Match`, …) match the documented events regardless of case, spaces or underscores. Names that still don't match are reported as unknown (TC-20).
+- The anchor div that `vdo.ai.js` renames to `<tag>-<n>` and moves for custom placement counts as the tag's div (TC-3, TC-13, Q2). The DOM tracker counts elements once and records moves separately from removal/recreation.
+- Versioned dependency files (`vdo.min.js?v=…`, `vdo.player.8.0.js`, `rtb_v7.45.0.js`, `allowed_url.php`/`allowed_url_go.php`, gtag) are recognised (TC-12).
+- Any `-v<number>` sibling tag is valid (TC-18).
+- Forceplay must precede Auto_Plays; Video Start (content) is no longer required after Ad Request (TC-5).
+- A blocked event outside its documented window (Blocked URL: loaded→initVdo; others: initVdo→Pageview) is at least a warning (TC-11).
+- Website Pageview and Website Pageview Match are counted per page across tags, at most 1 each (TC-7).
+- Began ATF covers a player in or above the viewport (TC-8).
+- Device coverage reads the per-player samples correctly; it previously always reported Unknown (TC-16).
+- Active View pingbacks (`bs`, `mtos`, `p`) settle TC-10 viewability inside cross-origin ad frames when the visibility policy is confirmed.
+- Deep tests accept either documented install form: a direct `<script src>` or the inline snippet (one of them, once).
+
 ## Executable chunks
 
 1. **Local execution foundation (implemented in this change):** PostgreSQL jobs/reports, one worker per database schema, bounded admission, sequential devices within each job, restart recovery, retained completed-device results, screenshot hashes, loopback-only server, request validation and readiness endpoint. Legacy reports.json is imported once without modifying the source file. Queued jobs resume; interrupted jobs fail explicitly instead of being replayed.

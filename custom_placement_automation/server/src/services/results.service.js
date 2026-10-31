@@ -5,7 +5,7 @@ import config from '../config/index.js';
 import { httpError } from '../utils/httpError.js';
 import { clearScripts } from './scriptStore.service.js';
 import { getDatabase } from './database.service.js';
-import { summarizeDeepRun } from './deepValidation.service.js';
+import { addPlainLanguage, deepPerUrl, summarizeDeepRun } from './deepValidation.service.js';
 
 const { screenshotsDir } = config.storage;
 export const SCREENSHOTS_URL_PATH = '/screenshots';
@@ -16,13 +16,13 @@ async function readRuns() {
 
 const appendRun = (run) => getDatabase().saveRun(run);
 
-async function writeScreenshots(runId, resultId, buffers) {
+async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   const runDir = path.join(screenshotsDir, runId);
   await fs.mkdir(runDir, { recursive: true });
 
   return Promise.all(
     buffers.map(async (buffer, index) => {
-      const fileName = `${resultId}_${index + 1}.jpg`;
+      const fileName = `${resultId}_${prefix}${index + 1}.jpg`;
       await fs.writeFile(path.join(runDir, fileName), buffer);
       return {
         url: `${SCREENSHOTS_URL_PATH}/${runId}/${fileName}`,
@@ -33,14 +33,22 @@ async function writeScreenshots(runId, resultId, buffers) {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false, allowOtherDomains = false, offDomainUrls = [] }, run) {
+  const offDomain = new Set(offDomainUrls);
   const id = crypto.randomUUID();
 
   const results = await Promise.all(
-    run.results.map(async ({ screenshots, ...result }) => {
+    run.results.map(async ({ screenshots, deepScreenshots = [], ...result }) => {
       const resultId = crypto.randomUUID();
       const artifacts = await writeScreenshots(id, resultId, screenshots);
-      return { ...result, id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
+      const deepArtifacts = await writeScreenshots(id, resultId, deepScreenshots.map((shot) => shot.jpeg), 'deep_');
+      const deep = result.deep && {
+        ...result.deep,
+        screenshots: deepArtifacts.map((a) => a.url),
+        screenshotLabels: deepScreenshots.map((shot) => shot.label),
+        screenshotArtifacts: deepArtifacts,
+      };
+      return { ...result, ...(deep ? { deep } : {}), ...(offDomain.has(result.url) ? { offDomain: true } : {}), id: resultId, screenshots: artifacts.map(a => a.url), artifacts };
     }),
   );
 
@@ -56,6 +64,16 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
     failCount: run.failCount,
     errorCount: run.errorCount,
     ...(deep ? { deep: true, deepSummary: summarizeDeepRun(results) } : {}),
+    ...(refreshIntervalSec ? { refreshIntervalSec } : {}),
+    // Staging / preview URLs on another host than the publisher domain, allowed by the user for this run.
+    ...(allowOtherDomains ? { allowOtherDomains: true, offDomainUrls: [...offDomain] } : {}),
+    // Sticky runs keep their 25-check counts per URL for History, never summed across URLs.
+    ...(stickyCode ? {
+      stickyCode,
+      stickyAdditional,
+      reviewCount: run.reviewCount ?? 0,
+      stickySummary: { perUrl: results.filter((r) => r.sticky).map((r) => ({ url: r.url, overallVerdict: r.sticky.overallVerdict, review: r.sticky.review, passShare: r.sticky.passShare, total: r.sticky.total, verdictCounts: r.sticky.verdictCounts })) },
+    } : {}),
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     results,
@@ -84,7 +102,10 @@ export async function listRuns({ page, pageSize, q = '', status = '', type = '',
   const from = (page - 1) * pageSize;
 
   return {
-    runs: runs.slice(from, from + pageSize).map(({ results, ...run }) => run),
+    // Runs saved before per-URL deep counts existed get them from their results.
+    runs: runs.slice(from, from + pageSize).map(({ results, ...run }) => (run.deep && run.deepSummary && !run.deepSummary.perUrl
+      ? { ...run, deepSummary: { ...run.deepSummary, perUrl: deepPerUrl(results) } }
+      : run)),
     total: runs.length,
     page,
     pageSize,
@@ -94,7 +115,7 @@ export async function listRuns({ page, pageSize, q = '', status = '', type = '',
 export async function getRun(runId) {
   const run = (await readRuns()).find((r) => r.id === runId);
   if (!run) throw httpError(404, 'Run not found');
-  return run;
+  return addPlainLanguage(run);
 }
 
 export async function deleteRun(runId) {

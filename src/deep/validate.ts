@@ -21,8 +21,11 @@ import { validateLayout } from "../rules/layout.js";
 import { validateLoggerPresence } from "../rules/logger-presence.js";
 import { parseTimingPolicy, validateTiming } from "../rules/timing.js";
 import { applyViewabilityContext, applyVisibilityContext, parseVisibilityPolicy, validateViewability } from "../rules/viewability.js";
-import { productForTag, validateDependencyBuild, validateEventSanity, validateTagDomain } from "./cases.js";
-import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScrollSettings } from "./runner.js";
+import { applyActiveViewEvidence, summarizeActiveView } from "../rules/activeview.js";
+import { productForTag, validateDependencyBuild, validateEventSanity, validatePlayerFileTiming, validateTagDomain } from "./cases.js";
+import { REFRESH_INTERVALS_SEC, REFRESH_LATE_MS, validateSafeFrame, validateSlotRefresh, type ExtraCheck, type RefreshIntervalSec } from "./extra.js";
+import { CASE_GUIDE, resultMeaning } from "./guide.js";
+import { runDeepBrowser, type DeepBrowserRunOptions, type DeepBrowserRunResult, type DeepScreenshot, type DeepScrollSettings } from "./runner.js";
 
 export const CASE_TITLES: Record<TestCaseId, string> = {
   "TC-1": "Correct tag and vdo.ai.js loading",
@@ -68,12 +71,17 @@ export interface DeepValidationInput {
   // Defaults to https://a.vdo.ai/core/<tag>/vdo.ai.js; local fixture tests serve the tag themselves.
   loaderUrl?: string;
   allowPrivateNetwork?: boolean;
+  // Optional ad slot refresh check: after the normal observation, keep the player in view and watch for a new ad.
+  refresh?: { intervalSec: RefreshIntervalSec };
   runBrowser?: (options: DeepBrowserRunOptions) => Promise<DeepBrowserRunResult>;
 }
 
 export interface DeepCaseSummary {
   testCaseId: TestCaseId;
   title: string;
+  // Plain language: what the case checks, and what this verdict means for it.
+  checks: string;
+  meaning: string;
   verdict: Verdict;
   category: string;
   summary: string;
@@ -103,11 +111,15 @@ export interface DeepValidationSummary {
   probableCauses: Array<{ testCaseId: TestCaseId; code: string; summary: string; confidence: string; owner: string; nextChecks: string[]; rules: "draft" | "confirmed" }>;
   executionErrors: Array<{ stage: string; message: string }>;
   limitations: string[];
+  // Checks added on top of the 23 test cases; never counted in verdictCounts.
+  extraChecks: ExtraCheck[];
 }
 
 export interface DeepValidationResult {
   summary: DeepValidationSummary;
   report: DeterministicReport;
+  // JPEG images aimed at the player, taken with the custom code applied; saved by the caller.
+  screenshots: DeepScreenshot[];
 }
 
 const DEFAULT_CONFIG_DIRECTORY = fileURLToPath(new URL("../../../config/", import.meta.url));
@@ -134,23 +146,25 @@ function bounded(value: JsonValue): JsonValue {
 
 // Which repository policy each case's rule depends on, used to explain UNKNOWN verdicts.
 const CASE_POLICIES: Partial<Record<TestCaseId, { key: string; label: string }>> = {
-  "TC-2": { key: "timing", label: "timing" },
-  "TC-5": { key: "eventRules", label: "event rules" },
-  "TC-6": { key: "eventRules", label: "event rules" },
-  "TC-7": { key: "eventRules", label: "event rules" },
-  "TC-8": { key: "visibilityPolicy", label: "visibility" },
-  "TC-9": { key: "demandPolicy", label: "demand" },
-  "TC-10": { key: "demandPolicy", label: "demand and auction" },
-  "TC-11": { key: "runtimePolicy", label: "runtime (blocked events)" },
-  "TC-12": { key: "runtimePolicy", label: "runtime (dependencies)" },
-  "TC-15": { key: "timing", label: "timing" },
+  "TC-5": { key: "eventRules", label: "event" },
+  "TC-6": { key: "eventRules", label: "event" },
+  "TC-7": { key: "eventRules", label: "event" },
+  "TC-8": { key: "visibilityPolicy", label: "viewability" },
+  "TC-9": { key: "demandPolicy", label: "ad request" },
+  "TC-10": { key: "demandPolicy", label: "ad delivery" },
+  "TC-11": { key: "runtimePolicy", label: "blocked-event" },
+  "TC-12": { key: "runtimePolicy", label: "required-file" },
+  "TC-15": { key: "timing", label: "speed limit" },
   "TC-16": { key: "devicePolicy", label: "device" },
-  "TC-22": { key: "eventRules", label: "event rules" },
+  "TC-22": { key: "eventRules", label: "event" },
   "TC-23": { key: "articlePolicy", label: "article navigation" },
 };
 
 function describe(item: unknown): string {
-  if (typeof item === "string") return item;
+  if (typeof item === "string") {
+    const missing = /^(.+): missing ([\w ]+)$/.exec(item);
+    return missing === null ? item : `${missing[1]}: the '${missing[2]}' event never fired`;
+  }
   if (typeof item === "object" && item !== null && !Array.isArray(item)) {
     const record = item as Record<string, unknown>;
     for (const key of ["detail", "reason", "message", "cause"]) if (typeof record[key] === "string") return record[key] as string;
@@ -158,7 +172,34 @@ function describe(item: unknown): string {
   return JSON.stringify(item);
 }
 
-const readable = (value: string) => value.replaceAll("_", " ");
+// Plain wording for the technical states rules report.
+const PLAIN_STATES: Record<string, string> = {
+  visibility_policy_unconfirmed: "The page data was captured, but the viewability rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  demand_policy_unconfirmed: "The page data was captured, but the ad delivery rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  auction_policy_unconfirmed: "The page data was captured, but the ad auction rules have not been signed off yet, so the tool will not call this a pass or a fail.",
+  capture_incomplete: "The page was still loading or some tracking calls never finished, so the tool could not see everything it needs.",
+  frame_geometry_unobservable: "The ad plays inside a frame the tool cannot look into, so it could not measure how visible the player was.",
+  visibility_samples_unavailable: "The tool could not measure the player's position on screen.",
+  no_player_file_requests_observed: "The page never requested vdo.ai.js or the player's files, so their load times could not be measured.",
+  no_logger_requests_observed: "The player sent no tracking calls, so there was nothing to check.",
+  dep_field_not_observed: "Tracking calls did not include the build ('dep') value.",
+  no_logger_identity_observed: "Tracking calls did not include the tag or website name.",
+  execution_error: "The test browser hit an error on this page, so this check could not run.",
+  no_captured_evidence_for_finding: "The rule spotted a possible problem but no page data backs it up, so it is not reported as a failure.",
+  tag_prefix_not_approved: "The tag does not start with an approved product prefix (v, c, s or b).",
+  dom_unavailable: "The tool could not read the page structure.",
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  requestCount: "vdo.ai.js requests",
+  externalScriptCount: "vdo.ai.js script tags",
+  bootstrapScriptCount: "inline install snippets",
+  anchorCount: "player divs",
+  status: "server status",
+  resourceType: "file type",
+};
+
+const readable = (value: string) => PLAIN_STATES[value] ?? value.replaceAll("_", " ");
 
 // A short, plain-language reason taken from the rule's own observation.
 export function caseSummary(check: CheckResult, draftPolicies: readonly string[] = []): string {
@@ -177,21 +218,18 @@ export function caseSummary(check: CheckResult, draftPolicies: readonly string[]
     const differences = Object.entries(expected).flatMap(([key, value]) => {
       const actual = record[key];
       const primitive = (item: unknown) => item === null || ["string", "number", "boolean"].includes(typeof item);
-      return primitive(value) && primitive(actual) && actual !== value ? [`${readable(key)}: expected ${String(value)}, observed ${String(actual)}`] : [];
+      return primitive(value) && primitive(actual) && actual !== value ? [`${FIELD_LABELS[key] ?? readable(key)}: expected ${String(value)}, found ${String(actual)}`] : [];
     });
     if (differences.length > 0) return differences.slice(0, 3).join("; ");
   }
   if (check.verdict === "FAIL" || check.verdict === "WARNING") return "Did not match the expected behaviour; see the observed detail.";
   if (check.verdict === "UNKNOWN") {
-    if (check.testCaseId === "TC-23") return "Needs an approved infinite-scroll/SPA navigation for this site; only one article was visited.";
+    if (check.testCaseId === "TC-23") return "This site has no saved steps for moving to the next article (infinite scroll or single-page navigation), so only one article was visited. QA needs to add those steps for the site.";
     const policy = CASE_POLICIES[check.testCaseId];
-    if (policy !== undefined && draftPolicies.includes(policy.key)) return `Evidence captured, but the ${policy.label} policy is still a draft; this rule only passes against a confirmed policy.`;
-    return "Required evidence was not captured.";
+    if (policy !== undefined && draftPolicies.includes(policy.key)) return `The page data was captured, but the ${policy.label} rules have not been signed off yet, so the tool will not call this a pass or a fail.`;
+    return "The page did not provide the information this check needs.";
   }
-  if (check.verdict === "PASS") {
-    if (typeof record.state === "string") return readable(record.state);
-    return "Observed behaviour matched the rule.";
-  }
+  if (check.verdict === "PASS") return "Observed behaviour matched the rule.";
   return "Not applicable to this page or product.";
 }
 
@@ -209,6 +247,9 @@ function devicePolicyFor(raw: Record<string, unknown>, input: DeepValidationInpu
       emulated: input.device.kind === "mobile",
       // The fixture tap selector is not a publisher selector; no tap is configured for real pages.
       tap: { state: "disabled", selector: null, settleMs: 0, playbackRequired: false },
+      // iPhone/Safari is out of scope for deep tests: no real-iOS evidence and no iOS-only BlockedInline exercise.
+      realIosEvidence: "not_applicable",
+      requiredBlockEvents: (Array.isArray(template.requiredBlockEvents) ? template.requiredBlockEvents : []).filter((event) => event !== "blocked_inline"),
     }),
   };
 }
@@ -287,10 +328,12 @@ function integrationExpectation(rawProfile: Record<string, unknown>, tagName: st
 // Real pages always end with some requests in flight (media, ad refresh, beacons). The deep test treats the
 // capture as complete when nothing structural is missing and every logger and tag-loader request finished.
 const STRUCTURAL_GAPS = new Set(["service_worker_visibility", "evidence_limit_reached", "page_capture_unavailable"]);
+// A slow or failed screenshot says nothing about the player; only missing DOM or visibility data does.
+const isScreenshotGap = (gap: { code: string; detail: string }) => gap.code === "page_capture_unavailable" && gap.detail.startsWith("Screenshot unavailable");
 
 function deepCaptureComplete(browser: DeepBrowserRunResult, tagName: string): boolean {
   if (browser.status !== "completed") return false;
-  if (browser.capture.gaps.some((gap) => STRUCTURAL_GAPS.has(gap.code))) return false;
+  if (browser.capture.gaps.some((gap) => STRUCTURAL_GAPS.has(gap.code) && !isScreenshotGap(gap))) return false;
   const byId = new Map(browser.capture.evidence.map((item) => [item.evidenceId, item]));
   const loggerNetworkIds = new Set(browser.capture.evidence.flatMap((item) => item.source === "browser_logger" && typeof item.data.networkEvidenceId === "string" ? [item.data.networkEvidenceId] : []));
   return !browser.capture.gaps.some((gap) => {
@@ -355,6 +398,11 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const policies = { aliases, timing, eventRules, runtimePolicy, demandPolicy, auctionPolicy, visibilityPolicy, articlePolicy, devicePolicy, rcaPolicy };
   const draftPolicies = Object.entries(policies).flatMap(([name, policy]) => policy.status === "confirmed" ? [] : [name]);
 
+  if (input.refresh !== undefined && !REFRESH_INTERVALS_SEC.includes(input.refresh.intervalSec)) throw new TypeError(`refresh.intervalSec must be one of ${REFRESH_INTERVALS_SEC.join(", ")}`);
+  const playerSelector = `#vdoai_parentWrapperDiv, .vdoai_parentWrapperDiv, #${input.tagName}, [id^="${input.tagName}-"]`;
+  // The watch covers one full interval plus the late tolerance, with a few seconds to spare.
+  const refreshWatchMs = input.refresh === undefined ? 0 : input.refresh.intervalSec * 1000 + REFRESH_LATE_MS + 5_000;
+
   const runId = `deep-${randomUUID()}`;
   const queued = createQueuedRun({ runId, profileId, targetUrl: input.targetUrl, deviceId: input.device.id, createdAt: new Date().toISOString() });
   const browser = await (input.runBrowser ?? runDeepBrowser)({
@@ -362,13 +410,16 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     browserExecutablePath: input.browserExecutablePath,
     contextOptions: input.device.contextOptions,
     navigationTimeoutMs: input.navigationTimeoutMs ?? 30_000,
-    totalTimeoutMs: input.totalTimeoutMs ?? 90_000,
+    totalTimeoutMs: (input.totalTimeoutMs ?? 90_000) + refreshWatchMs,
     observeAfterLoadMs: input.observeAfterLoadMs ?? 15_000,
     visibilitySampleIntervalMs: visibilityPolicy.sampleIntervalMs,
     ...(input.scroll === undefined ? {} : { scroll: input.scroll }),
     ...(input.code?.type === "vdo.ai.js" ? { scriptOverride: { tagName: input.tagName, body: input.code.body, loaderOrigin: new URL(loaderUrlFor(input)).origin } } : {}),
     ...(input.code?.type === "style.css" ? { injectCss: input.code.body } : {}),
     ...(input.allowPrivateNetwork === undefined ? {} : { allowPrivateNetwork: input.allowPrivateNetwork }),
+    screenshots: { playerSelector },
+    safeFrames: { playerSelector },
+    ...(input.refresh === undefined ? {} : { refreshWatch: { playerSelector, watchMs: refreshWatchMs }, captureLimits: { maxEvidenceRecords: 25_000 } }),
   });
   const executionState = browser.status === "completed" ? "completed" : browser.status === "timed_out" ? "timed_out" : "errored";
   const run = parseRun({ ...queued, executionState });
@@ -383,6 +434,12 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   });
   const articleEpoch = articleEpochs[0]!;
   const bundle = normalizeEvidence({ run, capture: browser.capture, articleEpochs, profile, eventAliases: aliases, physicalLoadId: `${runId}-load-1` });
+  // Tech Doc: a page installs the tag either with a direct <script src> (no inline snippet) or with the documented
+  // inline snippet. Expect whichever single form the page uses; two or more snippets still fail TC-3/TC-13.
+  const snippetCounts = browser.capture.evidence.filter((item) => item.source === "browser_dom" && item.data.kind === "page_snapshot")
+    .map((item) => (Array.isArray(item.data.bootstrapScripts) ? item.data.bootstrapScripts : [])
+      .filter((script) => typeof script === "object" && script !== null && !Array.isArray(script) && Array.isArray(script.referencedTags) && script.referencedTags.includes(input.tagName)).length);
+  expectation.expectedBootstrapScriptCount = Math.min(1, Math.max(0, ...snippetCounts));
   const shared = { evidence: bundle.evidence, deviceId: run.deviceId, articleEpochId: articleEpoch.articleEpochId, tagName: expectation.tagName };
 
   // Same composition as the validator's report command, plus the TC-18/19/20 adapters.
@@ -394,19 +451,24 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const demand = validateDemand({ ...runtimeShared, policy: demandPolicy });
   const auction = validateAuction({ ...runtimeShared, policy: auctionPolicy, demandPolicy });
   const viewability = validateViewability({ ...runtimeShared, policy: visibilityPolicy });
+  const viewableMs = visibilityPolicy.products.find((item) => item.product === expectation.tag.product)?.minimumContinuousMs ?? 2_000;
+  const activeView = summarizeActiveView(bundle.evidence, viewableMs);
+  const tc10Viewability = applyActiveViewEvidence(viewability, activeView, visibilityPolicy.status === "confirmed");
   const layout = validateLayout(runtimeShared);
   const deviceCheck = validateDevice({ evidence: bundle.evidence, policy: devicePolicy, device: deviceRule, deviceId: run.deviceId, captureComplete, runtime: { os: browser.metadata.os, browser: browser.metadata.browser, viewport: browser.metadata.viewport } });
   const loggerCaseInput = { ...shared, aliases, captureComplete };
   const evaluatedChecks = [
     ...validateIntegration({ ...shared, expectation }),
-    ...validateTiming({ ...shared, policy: timing, loaderUrl: expectation.loaderUrl, captureContext: { coldCache: browser.metadata.coldCache, networkConditions: browser.metadata.networkConditions } }),
+    // TC-2 uses the agreed per-file rule below; TC-15 (logger timing) stays with the timing rule.
+    ...validateTiming({ ...shared, policy: timing, loaderUrl: expectation.loaderUrl, captureContext: { coldCache: browser.metadata.coldCache, networkConditions: browser.metadata.networkConditions } }).filter((check) => check.testCaseId !== "TC-2"),
+    validatePlayerFileTiming({ ...shared, dependencies: runtimePolicy.dependencies, product: expectation.tag.product, passMaxMs: timing.script.passMaxMs, warningMaxMs: timing.script.warningMaxMs }),
     validateLoggerPresence({ ...shared, loaderUrl: expectation.loaderUrl, captureComplete }),
     ...applyDemandContext(applyRuntimeContext(applyVisibilityContext(eventChecks.filter((check) => check.testCaseId !== "TC-7" && check.testCaseId !== "TC-22"), viewability), blocked, dependencies), demand),
     ...articleChecks,
     viewability.tc8,
     blocked.check,
     dependencies,
-    applyAuctionContext(applyViewabilityContext(demand.check, viewability), auction),
+    applyAuctionContext(applyViewabilityContext(demand.check, tc10Viewability), auction),
     layout,
     deviceCheck,
     validateTagDomain({ ...loggerCaseInput, targetUrl: input.targetUrl, domain: input.domain }),
@@ -431,9 +493,10 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
   const limitations = [
     ...(draftPolicies.length > 0 ? [`Draft policies (${draftPolicies.join(", ")}) are used; rules that require confirmed policy report UNKNOWN instead of PASS.`] : []),
     "No approved click/scroll article navigation exists for this page, so TC-23 cannot reach three distinct articles.",
-    ...(input.device.kind === "mobile" ? ["Mobile is Chromium emulation and cannot certify real iOS/Safari behaviour."] : []),
+    ...(input.device.kind === "mobile" ? ["Mobile is an emulated Android phone (Pixel 7) in Chromium; iPhone/Safari is not tested."] : []),
     ...(input.code?.type === "vdo.ai.js" && browser.scriptOverrideHits === 0 ? ["The page never requested the tag's vdo.ai.js, so the custom placement code did not run."] : []),
     ...(inFlightAtEnd(browser) > 0 ? [`${inFlightAtEnd(browser)} request(s) were still in flight when observation ended; they are recorded but only logger and tag-loader requests must finish.`] : []),
+    ...(browser.screenshotNotes ?? []),
     ...(browser.blockedRequestCount > 0 ? [`${browser.blockedRequestCount} request(s) to private or unresolvable addresses were blocked.`] : []),
   ];
 
@@ -457,6 +520,8 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     cases: report.checks.map((check) => ({
       testCaseId: check.testCaseId,
       title: CASE_TITLES[check.testCaseId] ?? check.testCaseId,
+      checks: CASE_GUIDE[check.testCaseId]?.checks ?? "",
+      meaning: resultMeaning(check.testCaseId, check.verdict),
       verdict: check.verdict,
       category: check.category,
       summary: caseSummary(check, draftPolicies).slice(0, 500),
@@ -475,6 +540,10 @@ export async function runDeepValidation(input: DeepValidationInput): Promise<Dee
     })),
     executionErrors: report.executionErrors.map((error) => ({ stage: error.stage, message: error.message })),
     limitations,
+    extraChecks: [
+      validateSafeFrame({ evidence: browser.capture.evidence, ...(browser.safeFrames === undefined ? {} : { safeFrames: browser.safeFrames }), completed: browser.status === "completed" }),
+      ...(input.refresh === undefined ? [] : [validateSlotRefresh({ evidence: browser.capture.evidence, intervalSec: input.refresh.intervalSec, refreshWindow: browser.refreshWindow ?? null })]),
+    ],
   };
-  return { summary, report };
+  return { summary, report, screenshots: browser.screenshots ?? [] };
 }

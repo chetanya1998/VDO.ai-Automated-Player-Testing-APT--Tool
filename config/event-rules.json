@@ -17,9 +17,9 @@
     "replay": "optional"
   },
   "order": {
-    "common": [["loaded", "init_vdo"], ["init_vdo", "pageview"]],
+    "common": [["loaded", "init_vdo"], ["init_vdo", "pageview"], ["forceplay", "auto_plays"]],
     "served": [["ad_request", "ad_match"], ["ad_match", "video_loaded"], ["video_loaded", "video_start"]],
-    "noAd": [["ad_request", "video_start"]]
+    "noAd": []
   },
   "pageview": {
     "perTag": 1,

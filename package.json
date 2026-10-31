@@ -7,6 +7,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "app": "node custom_placement_automation/scripts/app.mjs",
     "build": "tsc -p tsconfig.json && pnpm typecheck:web && pnpm build:web",
     "build:web": "node scripts/build-web.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && pnpm typecheck:web",

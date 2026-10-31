@@ -1,4 +1,5 @@
 node_modules/
+.app-state.json
 .env
 dist/
 server/storage/

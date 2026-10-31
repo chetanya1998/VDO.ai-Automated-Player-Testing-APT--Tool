@@ -25,6 +25,7 @@ export interface DomMutationSnapshot {
   tagName: string | null;
   added: number;
   removed: number;
+  moved?: number;
 }
 
 export interface DomPlayerSnapshot {
@@ -47,25 +48,44 @@ export interface DomSnapshot {
 export const DOM_TRACKER_INIT_SCRIPT = `(() => {
   const key = "__vdoDomTracker";
   const state = { entries: new Map() };
+  // Count elements, not mutation records: one element can appear in several records while the page is parsed.
+  // A node removed and re-inserted (custom placement moving the anchor) is a move, not a recreation.
+  const attached = new WeakSet();
+  const detached = new WeakSet();
   const tagPattern = /^[vcsb]-[a-z0-9-]+$/i;
   const loaderTag = (value) => {
     try { return /\\/core\\/([^/]+)\\/vdo\\.ai\\.js$/i.exec(new URL(value, location.href).pathname)?.[1] ?? null; }
     catch { return null; }
   };
-  const record = (kind, identity, tagName, action) => {
+  const record = (kind, identity, tagName, action, element) => {
     const id = kind + ":" + identity;
-    const entry = state.entries.get(id) ?? { kind, identity, tagName, added: 0, removed: 0 };
-    entry[action] += 1;
+    const entry = state.entries.get(id) ?? { kind, identity, tagName, added: 0, removed: 0, moved: 0 };
+    if (action === "added") {
+      if (attached.has(element)) return;
+      attached.add(element);
+      if (detached.has(element)) {
+        detached.delete(element);
+        entry.removed -= 1;
+        entry.moved += 1;
+      } else {
+        entry.added += 1;
+      }
+    } else {
+      if (!attached.has(element)) return;
+      attached.delete(element);
+      detached.add(element);
+      entry.removed += 1;
+    }
     state.entries.set(id, entry);
   };
   const visit = (node, action) => {
     if (!(node instanceof Element)) return;
     const elements = [node, ...node.querySelectorAll("[id],script[src]")];
     for (const element of elements) {
-      if (element.id && tagPattern.test(element.id)) record("anchor", element.id, element.id, action);
+      if (element.id && tagPattern.test(element.id)) record("anchor", element.id, element.id, action, element);
       if (element instanceof HTMLScriptElement && element.src) {
         const tagName = loaderTag(element.src);
-        if (tagName) record("external_script", element.src, tagName, action);
+        if (tagName) record("external_script", element.src, tagName, action, element);
       }
     }
   };
