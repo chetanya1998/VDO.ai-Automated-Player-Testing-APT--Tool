@@ -41,6 +41,8 @@ export default function CurrentCheck({ job: initialJob, onFinished }) {
   // Deep jobs run the placement check and the 23-case deep test once per URL and device.
   const progressLabel = job.type === 'sticky'
     ? `Sticky check… ${done}/${total} URLs (about 1 minute each)`
+    : job.type === 'implementation'
+    ? `Validating implementation… ${done}/${total} URLs (page load + ${job.watchSec ?? 30} s watch each)`
     : job.deep ? `Checking… ${done}/${total} steps (placement + deep test per URL)` : `Checking… ${done}/${total} URLs`;
 
   return (

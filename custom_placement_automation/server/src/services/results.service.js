@@ -33,7 +33,7 @@ async function writeScreenshots(runId, resultId, buffers, prefix = '') {
   );
 }
 
-export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false, allowOtherDomains = false, offDomainUrls = [] }, run) {
+export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName, scriptBytes, deep = false, refreshIntervalSec = null, stickyCode = null, stickyAdditional = false, tags = null, watchSec = null, allowOtherDomains = false, offDomainUrls = [] }, run) {
   const offDomain = new Set(offDomainUrls);
   const id = crypto.randomUUID();
 
@@ -73,6 +73,19 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
       stickyAdditional,
       reviewCount: run.reviewCount ?? 0,
       stickySummary: { perUrl: results.filter((r) => r.sticky).map((r) => ({ url: r.url, overallVerdict: r.sticky.overallVerdict, review: r.sticky.review, passShare: r.sticky.passShare, total: r.sticky.total, verdictCounts: r.sticky.verdictCounts })) },
+    } : {}),
+    // Implementation runs: the result of each tag on each URL (worst of its test cases), for History and the PDF.
+    ...(type === 'implementation' ? {
+      tags,
+      watchSec,
+      warningCount: run.warningCount ?? 0,
+      implementationSummary: {
+        perUrl: results.map((r) => ({
+          url: r.url,
+          status: r.status,
+          tags: (r.implementation?.tags ?? []).map((t) => ({ tag: t.tag, unit: t.unit, overallVerdict: t.overallVerdict, verdictCounts: t.verdictCounts, total: t.total })),
+        })),
+      },
     } : {}),
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,

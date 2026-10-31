@@ -18,6 +18,7 @@ const FILTERS = [
   { value: `type:${CHECK_TYPE.JS}`, label: 'Custom placement' },
   { value: `type:${CHECK_TYPE.CSS}`, label: 'CSS checks' },
   { value: `type:${CHECK_TYPE.STICKY}`, label: 'Sticky checks' },
+  { value: `type:${CHECK_TYPE.IMPLEMENTATION}`, label: 'Implementation validator' },
   { value: 'mode:deep', label: 'Deep tests' },
 ];
 
@@ -44,6 +45,12 @@ const BASE_COLUMNS = [
             {Number.isFinite(item.passShare) ? ` · ${Math.round(item.passShare * 100)}% passed` : ''} · {item.verdictCounts?.FAIL ?? 0} fail of {item.total ?? 25}
           </small>
         ))}
+        {/* Implementation runs: each tag's result per URL, never summed across URLs. */}
+        {(run.implementationSummary?.perUrl ?? []).slice(0, 3).flatMap((item, i, all) => item.tags.map((t) => (
+          <small key={`${item.url}-${i}-${t.tag}`}>
+            {all.length > 1 ? `URL ${i + 1} · ` : ''}{t.tag}: {t.overallVerdict === 'PASS' ? 'Pass' : t.overallVerdict === 'WARNING' ? 'Warning' : 'Fail'} · {t.verdictCounts.PASS} pass, {t.verdictCounts.WARNING} warning, {t.verdictCounts.FAIL} fail
+          </small>
+        )))}
       </span>
     ),
   },
@@ -62,7 +69,7 @@ const BASE_COLUMNS = [
     key: 'mode',
     header: 'Deep test (23 cases per URL)',
     render: (run) => {
-      if (run.type === CHECK_TYPE.STICKY) return <span className="muted">—</span>;
+      if (run.type === CHECK_TYPE.STICKY || run.type === CHECK_TYPE.IMPLEMENTATION) return <span className="muted">—</span>;
       if (!run.deep) return <span className="muted">Not run</span>;
       const perUrl = run.deepSummary?.perUrl ?? [];
       if (perUrl.length === 0) return <span className="depth-tag">Deep</span>;
@@ -104,6 +111,7 @@ const toRerunSettings = (run) => ({
   refreshIntervalSec: run.refreshIntervalSec ?? null,
   stickyCode: run.stickyCode ?? 'none',
   stickyAdditional: run.stickyAdditional === true,
+  watchSec: run.watchSec ?? 30,
   allowOtherDomains: run.allowOtherDomains === true,
   startedAt: run.startedAt,
 });

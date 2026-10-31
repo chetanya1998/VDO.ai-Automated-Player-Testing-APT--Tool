@@ -1,6 +1,7 @@
 import { Badge } from '../ui';
 import ResultCard from './ResultCard.jsx';
 import StickyResults from './StickyResults.jsx';
+import ImplementationResults from './ImplementationResults.jsx';
 import { VERDICTS, VERDICT_HELP, verdictLabel, verdictTone } from '../../utils/verdicts.js';
 import { CHECK_TYPE, checkTypeLabel } from '../../utils/checkTypes.js';
 import { formatDateTime, formatDuration, formatScroll, runStatus } from '../../utils/format.js';
@@ -8,17 +9,20 @@ import { formatDateTime, formatDuration, formatScroll, runStatus } from '../../u
 export default function RunResults({ run }) {
   const status = runStatus(run);
   const sticky = run.type === CHECK_TYPE.STICKY;
+  const implementation = run.type === CHECK_TYPE.IMPLEMENTATION;
+  const kind = sticky ? 'Sticky check' : implementation ? 'Implementation' : 'Placement';
   const total = run.passCount + run.failCount + run.errorCount;
   const deepRows = run.results.filter((result) => result.deep).map((result) => ({ url: result.url, overallVerdict: result.deep.overallVerdict, verdictCounts: result.deep.verdictCounts }));
 
   return (
     <section className="run">
       <header className="run-header">
-        <Badge tone={status}>{sticky ? 'Sticky check' : 'Placement'}: {status.toUpperCase()}</Badge>
+        <Badge tone={status}>{kind}: {status.toUpperCase()}</Badge>
         <Badge tone="neutral">{checkTypeLabel(run.type)}</Badge>
         {run.deep && <Badge tone="accent">Deep test</Badge>}
         {run.refreshIntervalSec && <Badge tone="accent">Refresh check · {run.refreshIntervalSec} s</Badge>}
         {run.offDomainUrls?.length > 0 && <Badge tone="warn">Staging / preview URLs</Badge>}
+        {implementation && run.watchSec && <Badge tone="accent">Watch {run.watchSec} s</Badge>}
         {sticky && <Badge tone="accent">{run.stickyCode && run.stickyCode !== 'none' ? `With ${run.stickyCode}` : 'Live tag'}</Badge>}
         <strong>{run.tag}</strong>
         <span className="muted">
@@ -33,12 +37,12 @@ export default function RunResults({ run }) {
       {/* Placement counts URLs; the deep test counts 23 test cases per URL. Kept apart so they are never added together. */}
       <section className="summary-section">
         <header className="summary-section-head">
-          <h4>{sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : 'Custom placement check'}</h4>
-          <p>{sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings are left out): 80% or more = Pass, 50% to under 80% = Pass · Review required, under 50% = Fail.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
+          <h4>{sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : implementation ? 'Implementation validator · TC-01 to TC-13 per tag and URL' : 'Custom placement check'}</h4>
+          <p>{sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings are left out): 80% or more = Pass, 50% to under 80% = Pass · Review required, under 50% = Fail.' : implementation ? 'Counts URLs. Every test case runs for every tag; a tag\'s result is the worst of its test cases. One FAIL fails the tag and the URL; a WARNING never does.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
         </header>
         <div className="stat-tiles">
           <div className="stat-tile"><b>{total}</b><span>URLs checked</span></div>
-          <div className="stat-tile tone-pass"><b>{run.passCount}</b><span>URLs passed{sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}</span></div>
+          <div className="stat-tile tone-pass"><b>{run.passCount}</b><span>URLs passed{sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}{implementation && run.warningCount ? ` (${run.warningCount} with warnings)` : ''}</span></div>
           <div className="stat-tile tone-fail"><b>{run.failCount}</b><span>URLs failed</span></div>
           <div className="stat-tile tone-error"><b>{run.errorCount}</b><span>URLs with errors</span></div>
         </div>
@@ -90,6 +94,8 @@ export default function RunResults({ run }) {
         {run.results.map((result, i) => (
           sticky
             ? <StickyResults key={result.id ?? `${result.url}-${i}`} result={result} index={i} />
+            : implementation
+            ? <ImplementationResults key={result.id ?? `${result.url}-${i}`} result={result} index={i} />
             : <ResultCard key={result.id ?? `${result.url}-${i}`} result={result} index={i} type={run.type} />
         ))}
       </div>

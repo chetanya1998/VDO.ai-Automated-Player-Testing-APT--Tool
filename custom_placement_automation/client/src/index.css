@@ -146,6 +146,8 @@ pre {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+  /* A hint under one field must not stretch its neighbour. */
+  align-items: start;
 }
 
 .form-actions {
@@ -1655,3 +1657,36 @@ details.deep-shots > summary { cursor: pointer; font-weight: 600; font-size: 13p
 /* URLs on another host than the publisher domain (staging / preview) */
 .form-note-warn { color: var(--warn); }
 .text-warn { color: var(--warn); }
+
+/* Implementation validator (TC-01 to TC-13) */
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -4px; }
+.tag-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-strong); color: var(--muted); }
+.tag-chip b { color: var(--text); font-weight: 600; margin-right: 4px; }
+.tag-chip.unit-banner { border-color: rgb(110 155 255 / 0.45); }
+.tag-chip.unit-offerwall { border-color: rgb(242 184 75 / 0.45); }
+.impl-tag { border: 1px solid var(--border); border-left: 3px solid var(--tone, var(--border)); border-radius: var(--radius-sm); padding: 12px 14px; margin-top: 12px; display: grid; gap: 10px; }
+.impl-step h5 { margin: 4px 0 6px; font-size: 13px; }
+.impl-table { table-layout: fixed; }
+.impl-table th:nth-child(1) { width: 28%; }
+.impl-table th:nth-child(2) { width: 96px; }
+.impl-table td { vertical-align: top; white-space: normal; }
+.impl-row td:first-child { border-left: 3px solid var(--tone); }
+.impl-id { display: grid; gap: 2px; }
+.impl-title { font-weight: 600; }
+.impl-evidence p { margin: 0 0 4px; }
+.impl-evidence ul { margin: 0 0 4px; padding-left: 16px; color: var(--muted); font-family: var(--mono); font-size: 11.5px; overflow-wrap: anywhere; }
+.impl-detail-row td { background: var(--surface-hover); display: table-cell; }
+.impl-detail-row .case-plain { margin-bottom: 8px; }
+.link-button { font: inherit; font-size: 12px; padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; }
+.link-button:hover { text-decoration: underline; }
+.impl-events summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.impl-event-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.impl-event { font-family: var(--mono); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px dashed var(--border-strong); color: var(--muted); }
+.impl-event.fired { border-style: solid; border-color: rgb(61 214 140 / 0.5); color: var(--text); }
+.impl-event.extra { border-style: solid; }
+@media (max-width: 720px) {
+  .impl-table, .impl-table tbody, .impl-table tr, .impl-table td { display: block; width: 100%; }
+  .impl-table thead { display: none; }
+  .impl-row td { border-left: 0; }
+  .impl-row { border-left: 3px solid var(--tone); margin-bottom: 8px; }
+}

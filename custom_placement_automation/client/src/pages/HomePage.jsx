@@ -71,7 +71,7 @@ export default function HomePage() {
         <div>
           <span className="block-eyebrow">vdo.ai · Automated player testing</span>
           <h1>Placement automation</h1>
-          <p>Check custom placement code on real publisher pages, optionally validate all 23 player test cases, or check floating players for sticky violations.</p>
+          <p>Check custom placement code on real publisher pages, optionally validate all 23 player test cases, check floating players for sticky violations, or validate a tag implementation (TC-01 to TC-13).</p>
         </div>
         <StatusPill tone={systemPill.tone}>{systemPill.label}</StatusPill>
       </header>

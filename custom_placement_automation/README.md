@@ -8,9 +8,9 @@ An optional **deep test** validates all 23 player test cases on each URL, on top
 
 ## Features
 
-### Three kinds of checks
+### Four kinds of checks
 
-The first two check placement code. The third, the **sticky violation checker**, checks how a floating player behaves; see [Sticky violation checker](#sticky-violation-checker-st-01-to-st-25).
+The first two check placement code. The third, the **sticky violation checker**, checks how a floating player behaves; see [Sticky violation checker](#sticky-violation-checker-st-01-to-st-25). The fourth, the **implementation validator**, checks that a live tag is installed correctly (Network, Logger and Elements); see [Implementation validator](#implementation-validator-tc-01-to-tc-13).
 
 | | **Custom placement (`vdo.ai.js`)** | **CSS (`style.css`)** |
 |---|---|---|
@@ -147,6 +147,42 @@ Like the placement checks, it can first apply a `vdo.ai.js` or `style.css` (**Co
 
 **Note:** these are internal preventative QA checks, not official Google violation triggers. A failure needs investigation, and a pass does not guarantee policy compliance.
 
+### Implementation validator (TC-01 to TC-13)
+
+Pick **Implementation validator** in step 1. It runs the test cases from *VDO.AI Implementation Validator: Test Cases* on the live page, the way you would check an install by hand in DevTools. No code is applied.
+
+- **Inputs:** the domain, up to 50 URLs and one or more **tag names**, separated by commas (for example `v-livemint, v-livemint-v1, b-livemint`). Each tag is tested on its own; two different tags on one page are not duplicates. At most 10 tags per check.
+- **Units from the tag prefix:** `v-…` video (a tag without a prefix is also video), `b-…` banner, `o-…` offerwall. Video and banner run 11 test cases, offerwall 10.
+- **Watch period (TC-03):** 30, 45 or 60 s. Each URL takes the page load plus the watch.
+
+Each page is opened in Chromium with the cache disabled (like DevTools with *Disable cache* ticked) and checked in three steps. All three always run, and every test case runs for every tag even after a FAIL, using only its own evidence.
+
+| ID | Test case | Step | Video | Banner | Offerwall | Result |
+|---|---|---|---|---|---|---|
+| TC-01 | Correct tag loads | Network | ✓ | ✓ | ✓ | PASS: `a.vdo.ai/core/<tag>/vdo.ai.js` returns 200. FAIL: no request, another site's tag, wrong unit prefix, non-200 or blocked |
+| TC-02 | Tag loads once | Network | ✓ | ✓ | ✓ | FAIL: two or more loads of the same tag (other tags are not counted) |
+| TC-03 | No slot refresh | Network | ✓ | ✓ | ✓ | FAIL: the tag loads again during the watch |
+| TC-04 | No logger.php error report | Network | ✓ | ✓ | ✓ | FAIL: any `logger.php?msg=` request, even with status 200 |
+| TC-05 | No blocking or error event | Logger | full list | Error only | Error only | Video FAIL: Blocked Player, BlockedInline, BlockedAutoPlay, Blocked IMA, Blocked Device, Blocked URL, codes `Q2Fubm90IH` / `bnVsbCBpcy`; WARNING: Blocked Agent |
+| TC-06 | Tag is not in a safeframe | Logger | ✓ | ✓ | ✓ | FAIL: a `page_url` on `safeframe.googlesyndication.com` or with `/safeframe/` |
+| TC-07 | One loaded and one pageview per page URL | Logger | ✓ | ✓ | ✓ | FAIL: a `page_url` without exactly one of each |
+| TC-08 | Expected events seen | Logger | recorded | ✓ | ✓ | WARNING: one of the eight events did not fire |
+| TC-09 | Content size mismatch | Logger | ✓ | | | WARNING: `size_mismatch_content` fired |
+| TC-10 | Dependency build | Logger | ✓ | ✓ | ✓ | WARNING: `dep` is not `dependencies_hbv4_latest` (or no dep was sent) |
+| TC-11 | Script present once | Elements | ✓ | ✓ | ✓ | FAIL: no script, wrong tag, or two or more |
+| TC-12 | Player present once | Elements | ✓ | | | FAIL: neither the in-content `<tag>-0` wrapper nor a floating `vdo_floating` player, or more than one |
+| TC-13 | Banner div present | Elements | | ✓ | | WARNING: no div whose id holds the tag with underscores |
+
+**Results.** Only PASS, WARNING and FAIL. A tag's result is the worst of its test cases; one FAIL fails the tag and the URL, and a WARNING never does. The report shows a summary line per tag (for example *8 PASS, 1 WARNING, 2 FAIL*), then one row per test case with its ID, result and evidence: the request URL and status, the event name and `page_url`, the error code and `msg`, or the `dep` value. Every logger event the tag sent is also listed (video's TC-08 is recorded this way).
+
+How the evidence is read:
+
+- **Network:** every request to `*.vdo.ai/core/<tag>/vdo.ai.js`, with status, failure and initiator. Requests within `IMPLEMENTATION_LOAD_WINDOW_MS` (10 s) of the first are the page load (TC-02); later ones are a refresh (TC-03). Chromium serves two identical script requests that are in flight at once with **one** network request, even with the cache disabled. So the validator also counts the `vdo.ai.js` `<script>` elements that load in every frame and uses the larger count. A duplicate embed fails TC-02 either way.
+- **Logger:** the JSON bodies `vdo.ai.js` posts to `analytics.vdo.ai/logger` (form and query payloads are read too). Only events whose `tagName` is the tag being tested count, grouped by `page_url`. Event names are matched ignoring case, spaces, `_` and `-`, and the real spellings count too (`player_blocked` = Blocked Player, `blocked_ima` = Blocked IMA). Error codes are found in the `error` event's `eventData`, which is where `logError` puts them.
+- **logger.php error reports** (`a.vdo.ai/core/logger.php?msg=…&tag=…&code=…&url=…&func=vdo.ai.js`) count for the tag in their `tag` parameter, or for every tag when it has none.
+- **Elements:** searched in the page and every frame. TC-12 counts in-content wrappers `<tag>-<n>` holding a `vdo_video_unit`, and floating `vdo_video_unit vdo_floating` players outside them. Floating players carry no tag name. When several video tags are tested on one page, each other video tag that loaded without an in-content wrapper claims one floating player first.
+- During the watch, the page is kept on the article (ads cannot navigate it away) and the first vdo.ai unit found is kept in view, so lazy units form and send `came_in_view` and `ad_request`.
+
 ### Staging and preview URLs on another domain
 
 Every URL must be on the publisher **domain** or one of its subdomains: `www.`, `m.` and so on are fine. Otherwise the form names the host and the check does not start. For staging or preview copies on another host, tick **Allow URLs on other domains (staging / preview)** under the URLs.
@@ -162,7 +198,8 @@ Every URL must be on the publisher **domain** or one of its subdomains: `www.`, 
 - Every run is saved locally and listed in **History**.
 - **Re-run:** fills the form with that run's settings and stored script so you can change something and run it again.
 - **PDF:** downloads a report for the run, with all results and screenshots. Deep runs add separate result totals, a legend of what each result means, and for every test case what it tested and what its result means in plain words.
-- **Re-run** keeps the deep test, refresh check and sticky settings (code to apply, additional checks).
+- **Re-run** keeps the deep test, refresh check, sticky settings (code to apply, additional checks) and the implementation validator's tags and watch period.
+- Filter **Implementation validator** lists those runs; the Check type column shows each tag's result per URL.
 - **Delete / Clear all:** removes runs and their screenshots.
 
 ## Quick start: one command
@@ -253,9 +290,9 @@ implementation/         planning notes
 | GET | `/api/health` | Health check |
 | GET | `/api/ready` | Database, queue and Chromium installation readiness |
 | GET | `/api/settings` | Default scroll settings, limits and the per-URL time limit |
-| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test and the safe frame check; `"refreshIntervalSec": 30 \| 45 \| 60` adds the ad slot refresh check; `"type": "sticky"` runs the sticky violation checker, with `"stickyCode": "none" \| "vdo.ai.js" \| "style.css"`) |
+| POST | `/api/placement-checks` | Start a check and return a job (`"deep": true` adds the 23-case deep test and the safe frame check; `"refreshIntervalSec": 30 \| 45 \| 60` adds the ad slot refresh check; `"type": "sticky"` runs the sticky violation checker, with `"stickyCode": "none" \| "vdo.ai.js" \| "style.css"`; `"type": "implementation"` runs the implementation validator, with `"tag": "v-a, b-a"` (one or more tags) and `"watchSec": 30 \| 45 \| 60`) |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
-| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`; `type=sticky` for sticky checks) |
+| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`; `type=sticky` for sticky checks, `type=implementation` for implementation runs) |
 | GET | `/api/history/:runId` | One run with its results |
 | GET | `/api/history/:runId/pdf` | Download the run as a PDF |
 | DELETE | `/api/history/:runId` | Delete one run and its screenshots |

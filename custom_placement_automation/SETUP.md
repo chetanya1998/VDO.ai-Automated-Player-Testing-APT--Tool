@@ -94,6 +94,8 @@ On Windows (PowerShell): `Copy-Item server/.env.example server/.env`
 | `CHROME_PATH` | — | Full path to `chrome.exe` / Chrome, only if it is installed somewhere unusual |
 | `URL_TIMEOUT_MS` | `60000` | Max time per URL, including all checks |
 | `STICKY_URL_TIMEOUT_MS` | `180000` | Max time per URL for the sticky violation checker |
+| `IMPLEMENTATION_URL_TIMEOUT_MS` | `150000` | Max time per URL for the implementation validator (page load + watch + Elements search) |
+| `IMPLEMENTATION_LOAD_WINDOW_MS` | `10000` | vdo.ai.js loads within this time of the first one count as the page load (TC-02); later ones as a slot refresh (TC-03) |
 | `PLACEMENT_EVENT_SETTLE_MS` | `3000` | How long to keep listening after the first `vdo:placement` event |
 | `SCREENSHOT_SETTLE_MS` | `1200` | Pause before each screenshot so the player can settle |
 | `SCROLL_STEP_VIEWPORT_RATIO` | `0.45` | Default scroll step, as a fraction of the screen height |

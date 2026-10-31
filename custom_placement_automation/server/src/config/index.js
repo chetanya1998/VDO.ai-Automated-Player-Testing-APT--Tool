@@ -79,6 +79,13 @@ const config = {
     urlTimeoutMs: envNumber('STICKY_URL_TIMEOUT_MS', 180000),
   },
 
+  implementation: {
+    // One URL: page load (up to the navigation limit), the TC-03 watch (30, 45 or 60 s) and the Elements search.
+    urlTimeoutMs: envNumber('IMPLEMENTATION_URL_TIMEOUT_MS', 150000),
+    // vdo.ai.js requests within this time of the first one are the page load (TC-02); later ones are refreshes (TC-03).
+    loadWindowMs: envNumber('IMPLEMENTATION_LOAD_WINDOW_MS', 10000),
+  },
+
   checks: {
     maxConcurrentJobs: envInteger('MAX_CONCURRENT_JOBS', 2, 8),
     maxPendingJobs: envInteger('MAX_PENDING_JOBS', 20, 200),

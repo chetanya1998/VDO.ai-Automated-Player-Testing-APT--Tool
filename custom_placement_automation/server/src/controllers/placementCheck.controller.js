@@ -5,6 +5,8 @@ import { CHECK_TYPE } from '../services/placementRunner.service.js';
 import { loadScript, storeScript } from '../services/scriptStore.service.js';
 import { REFRESH_INTERVALS_SEC, deepReadiness } from '../services/deepValidation.service.js';
 import { STICKY_CODE, STICKY_TYPE } from '../services/stickyRunner.service.js';
+import { IMPLEMENTATION_TYPE, WATCH_OPTIONS_SEC } from '../services/implementationRunner.service.js';
+import { parseTags } from '../services/implementation/rules.js';
 import { httpError } from '../utils/httpError.js';
 
 const TAG_PATTERN = /^[\w-]+$/;
@@ -28,7 +30,7 @@ function parseScroll(scroll = {}) {
   };
 }
 
-const CHECK_TYPES = [...Object.values(CHECK_TYPE), STICKY_TYPE];
+const CHECK_TYPES = [...Object.values(CHECK_TYPE), STICKY_TYPE, IMPLEMENTATION_TYPE];
 
 function parseCheckInput(body = {}) {
   const type = body.type ?? CHECK_TYPE.JS;
@@ -37,8 +39,11 @@ function parseCheckInput(body = {}) {
   const domain = normalizeDomain(body.domain ?? '');
   if (!DOMAIN_PATTERN.test(domain)) throw httpError(400, 'Enter a valid domain, e.g. example.com');
 
-  const tag = String(body.tag ?? '').trim();
-  if (!TAG_PATTERN.test(tag)) throw httpError(400, 'Tag may only contain letters, numbers, _ and -');
+  // The implementation validator tests one or more tags (comma separated); the other checks take exactly one.
+  const tags = type === IMPLEMENTATION_TYPE ? parseTags(body.tags ?? body.tag) : [String(body.tag ?? '').trim()];
+  if (tags.length === 0 || !tags.every((t) => TAG_PATTERN.test(t))) throw httpError(400, 'Tag may only contain letters, numbers, _ and -');
+  if (tags.length > 10) throw httpError(400, 'At most 10 tags per check');
+  const tag = tags.join(', ');
 
   const devices = [...new Set(Array.isArray(body.devices) ? body.devices : SUPPORTED_DEVICES)];
   if (devices.length === 0 || !devices.every((d) => SUPPORTED_DEVICES.includes(d))) {
@@ -89,10 +94,18 @@ function parseCheckInput(body = {}) {
     stickyCode = body.stickyCode ?? 'none';
     if (!STICKY_CODE.includes(stickyCode)) throw httpError(400, `\`stickyCode\` must be one of: ${STICKY_CODE.join(', ')}`);
   }
-  const scroll = parseScroll(body.scroll);
-  const codeType = type === STICKY_TYPE ? stickyCode : type;
+  // Implementation validator: TC-01 to TC-13 on the live tags; it watches each page for the TC-03 slot refresh.
+  let watchSec = null;
+  if (type === IMPLEMENTATION_TYPE) {
+    if (deep || refreshIntervalSec) throw httpError(400, 'The deep test and refresh check are not available with the implementation validator');
+    watchSec = body.watchSec ?? WATCH_OPTIONS_SEC[0];
+    if (!WATCH_OPTIONS_SEC.includes(watchSec)) throw httpError(400, `\`watchSec\` must be one of ${WATCH_OPTIONS_SEC.join(', ')}`);
+  }
+  // The implementation validator keeps the unit in view by itself; it has no lazy-scroll settings to save or show.
+  const scroll = type === IMPLEMENTATION_TYPE ? null : parseScroll(body.scroll);
+  const codeType = type === STICKY_TYPE ? stickyCode : type === IMPLEMENTATION_TYPE ? 'none' : type;
   const scriptName = codeType === 'none' ? null : String(body.scriptName ?? codeType).slice(0, 200);
-  return { type, domain, tag, devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType, allowOtherDomains, offDomainUrls: offDomain };
+  return { type, domain, tag, ...(type === IMPLEMENTATION_TYPE ? { tags, watchSec } : {}), devices, urls, scroll, scriptName, deep, refreshIntervalSec, stickyCode, stickyAdditional, codeType, allowOtherDomains, offDomainUrls: offDomain };
 }
 
 async function resolveScript(body, type) {

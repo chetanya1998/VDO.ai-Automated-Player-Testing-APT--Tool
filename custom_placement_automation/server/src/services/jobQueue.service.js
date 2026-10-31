@@ -3,6 +3,7 @@ import config from '../config/index.js';
 import { runPlacementChecks } from './placementRunner.service.js';
 import { runDeepCheck } from './deepValidation.service.js';
 import { STICKY_TYPE, runStickyChecks } from './stickyRunner.service.js';
+import { IMPLEMENTATION_TYPE, runImplementationChecks } from './implementationRunner.service.js';
 import { saveRun } from './results.service.js';
 import logger from '../utils/logger.js';
 import { getDatabase } from './database.service.js';
@@ -46,6 +47,8 @@ function toPublicJob(job) {
     refreshIntervalSec: input.refreshIntervalSec ?? null,
     stickyCode: input.stickyCode ?? null,
     stickyAdditional: input.stickyAdditional === true,
+    tags: input.tags ?? [input.tag],
+    watchSec: input.watchSec ?? null,
     allowOtherDomains: input.allowOtherDomains === true,
     script: { id: input.scriptId, name: input.scriptName, bytes: input.scriptBytes },
   };
@@ -71,6 +74,13 @@ async function processJob(job) {
         // Sticky violation checker: its own scenario instead of the placement check.
         if (input.type === STICKY_TYPE) {
           const run = await runStickyChecks({ tag: input.tag, device, urls: input.urls, script, codeType: input.stickyCode ?? 'none', includeAdditional: input.stickyAdditional === true, onUrlDone });
+          job.runs.push(await saveRun(input, run));
+          await getDatabase().saveJob(job);
+          continue;
+        }
+        // Implementation validator: TC-01 to TC-13 per tag on the live page.
+        if (input.type === IMPLEMENTATION_TYPE) {
+          const run = await runImplementationChecks({ tags: input.tags, device, urls: input.urls, watchSec: input.watchSec, onUrlDone });
           job.runs.push(await saveRun(input, run));
           await getDatabase().saveJob(job);
           continue;

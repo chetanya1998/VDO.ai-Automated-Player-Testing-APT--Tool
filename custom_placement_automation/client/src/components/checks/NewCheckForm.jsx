@@ -4,7 +4,7 @@ import { ArrowRightIcon } from '../ui/icons.jsx';
 import { startPlacementCheck } from '../../api/placementChecks.js';
 import { getSettings } from '../../api/settings.js';
 import PlacementEventHelp from './PlacementEventHelp.jsx';
-import { CHECK_TYPE } from '../../utils/checkTypes.js';
+import { CHECK_TYPE, UNIT_CASE_COUNT, UNIT_LABELS, parseTags, unitOf } from '../../utils/checkTypes.js';
 import { normalizeDomain, offDomainUrls } from '../../utils/domains.js';
 
 const DEVICES = ['desktop', 'mobile'];
@@ -28,7 +28,12 @@ const TYPE_CARDS = [
   { value: CHECK_TYPE.JS, title: 'Custom placement', description: 'Validate vdo.ai placement events' },
   { value: CHECK_TYPE.CSS, title: 'CSS check', description: 'Validate styles from style.css' },
   { value: CHECK_TYPE.STICKY, title: 'Sticky violation checker', description: '25 floating-player checks (ST-01 to ST-25)' },
+  { value: CHECK_TYPE.IMPLEMENTATION, title: 'Implementation validator', description: 'Tag install checks: Network, Logger, Elements (TC-01 to TC-13)' },
 ];
+
+// TC-03 watch: how long each page stays open while the validator looks for the tag loading again.
+const WATCH_OPTIONS = [30, 45, 60].map((value) => ({ value, label: `${value} s` }));
+const MAX_TAGS = 10;
 
 // Code the sticky checker can apply first; "none" checks the live tag as the site serves it.
 const STICKY_CODE_OPTIONS = [
@@ -81,6 +86,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const [refreshIntervalSec, setRefreshIntervalSec] = useState(prefill?.refreshIntervalSec ?? null);
   const [stickyCode, setStickyCode] = useState(prefill?.stickyCode ?? 'none');
   const [stickyAdditional, setStickyAdditional] = useState(prefill?.stickyAdditional ?? false);
+  const [watchSec, setWatchSec] = useState(prefill?.watchSec ?? 30);
   const [allowOtherDomains, setAllowOtherDomains] = useState(prefill?.allowOtherDomains ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -91,10 +97,14 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const offDomain = publisherDomain ? offDomainUrls(publisherDomain, urls) : [];
   const offDomainHosts = [...new Set(offDomain.map((value) => { try { return new URL(value).hostname; } catch { return value; } }))];
   const sticky = type === CHECK_TYPE.STICKY;
-  // The code file this check applies: vdo.ai.js, style.css, or none (sticky checker on the live tag).
-  const codeKind = sticky ? stickyCode : type;
+  const implementation = type === CHECK_TYPE.IMPLEMENTATION;
+  // The sticky checker and the implementation validator run their own scenario: no scroll settings, deep test or refresh check.
+  const ownScenario = sticky || implementation;
+  const tags = implementation ? parseTags(tag) : [tag.trim()].filter(Boolean);
+  // The code file this check applies: vdo.ai.js, style.css, or none (sticky checker on the live tag, implementation validator).
+  const codeKind = implementation ? 'none' : sticky ? stickyCode : type;
   const prefillType = prefill?.type ?? CHECK_TYPE.JS;
-  const prefillCodeKind = prefillType === CHECK_TYPE.STICKY ? (prefill?.stickyCode ?? 'none') : prefillType;
+  const prefillCodeKind = prefillType === CHECK_TYPE.IMPLEMENTATION ? 'none' : prefillType === CHECK_TYPE.STICKY ? (prefill?.stickyCode ?? 'none') : prefillType;
   const storedCode = prefill?.script && prefillCodeKind === codeKind ? prefill.script : null;
   const details = CODE_DETAILS[codeKind];
   const hasPrefilledScroll = Boolean(prefill?.scroll);
@@ -127,6 +137,8 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
 
     const pasting = source === 'paste';
     if (devices.length === 0) return setError('Pick at least one device.');
+    if (!implementation && /[\s,;]/.test(tag.trim())) return setError('Enter one tag. Only the implementation validator tests several tags at once.');
+    if (implementation && tags.length > MAX_TAGS) return setError(`At most ${MAX_TAGS} tags per check.`);
     if (urls.length === 0) return setError('Add at least one URL.');
     if (offDomain.length > 0 && !allowOtherDomains) {
       return setError(`${offDomainHosts.join(', ')} ${offDomainHosts.length === 1 ? 'is' : 'are'} not on ${publisherDomain}. Tick "Allow URLs on other domains (staging / preview)" to test ${offDomain.length === 1 ? 'it' : 'them'} anyway.`);
@@ -134,7 +146,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
     const needsCode = codeKind !== 'none';
     if (needsCode && pasting && !codeText.trim()) return setError(`Paste the ${codeKind} code to test.`);
     if (needsCode && !pasting && !codeFile && !storedCode) return setError(`Choose the ${codeKind} file to test.`);
-    if (!sticky && (deep || refreshIntervalSec) && deepEngine && !deepEngine.available) return setError(deepEngine.message);
+    if (!ownScenario && (deep || refreshIntervalSec) && deepEngine && !deepEngine.available) return setError(deepEngine.message);
 
     setSubmitting(true);
     try {
@@ -142,14 +154,15 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
       const job = await startPlacementCheck({
         type,
         domain: domain.trim(),
-        tag: tag.trim(),
+        tag: implementation ? tags.join(', ') : tag.trim(),
         devices,
         urls,
-        // The deep test and refresh check belong to the placement checks, not the sticky checker.
-        deep: sticky ? false : deep,
+        // The deep test and refresh check belong to the placement checks, not the sticky checker or implementation validator.
+        deep: ownScenario ? false : deep,
         allowOtherDomains,
-        refreshIntervalSec: sticky ? null : refreshIntervalSec,
+        refreshIntervalSec: ownScenario ? null : refreshIntervalSec,
         ...(sticky ? { stickyCode, stickyAdditional } : {}),
+        ...(implementation ? { watchSec } : {}),
         script: !needsCode ? undefined : pasting ? codeText : codeFile ? await codeFile.text() : undefined,
         scriptId: useStored ? storedCode.id : undefined,
         scriptName: !needsCode ? undefined : pasting ? codeKind : (codeFile?.name ?? storedCode?.name),
@@ -171,11 +184,11 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
   const limitSeconds = urlTimeoutMs ? Math.round(urlTimeoutMs / 1000) : 60;
   const ratioPercent = Number.isFinite(Number(scrollRatio)) && scrollRatio !== '' ? Math.round(Number(scrollRatio) * 100) : null;
   const summary = [
-    type === CHECK_TYPE.JS ? 'Custom placement' : sticky ? `Sticky violation check · ${stickyAdditional ? '25 checks' : '13 mandatory checks'}${stickyCode === 'none' ? '' : ` · with ${stickyCode}`}` : 'CSS check',
+    type === CHECK_TYPE.JS ? 'Custom placement' : sticky ? `Sticky violation check · ${stickyAdditional ? '25 checks' : '13 mandatory checks'}${stickyCode === 'none' ? '' : ` · with ${stickyCode}`}` : implementation ? `Implementation validator · ${plural(tags.length, 'tag')} · watch ${watchSec} s` : 'CSS check',
     devices.length ? devices.map(capitalize).join(' + ') : 'No device',
     plural(urls.length, 'URL'),
-    ...(deep && !sticky ? ['Deep test · 23 cases'] : []),
-    ...(refreshIntervalSec && !sticky ? [`Refresh check · ${refreshIntervalSec} s`] : []),
+    ...(deep && !ownScenario ? ['Deep test · 23 cases'] : []),
+    ...(refreshIntervalSec && !ownScenario ? [`Refresh check · ${refreshIntervalSec} s`] : []),
   ];
   const deepUnavailable = deepEngine !== null && !deepEngine.available;
   const deepSeconds = deepUrlTimeoutMs ? Math.round(deepUrlTimeoutMs / 1000) : 90;
@@ -201,8 +214,8 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
         </div>
       </header>
 
-      {prefill && !prefill.script && (
-        <Alert tone="info">That run has no stored {prefillType}, so add it again below.</Alert>
+      {prefill && !prefill.script && prefillCodeKind !== 'none' && (
+        <Alert tone="info">That run has no stored {prefillCodeKind}, so add it again below.</Alert>
       )}
 
       <form className="panel-form" onSubmit={handleSubmit}>
@@ -263,6 +276,18 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             </>
           )}
 
+          {implementation && (
+            <>
+              <p className="form-note">
+                Each page is opened in Chromium with the cache disabled and checked in three steps, like DevTools: <b>Network</b> (the
+                vdo.ai.js request, duplicates, slot refresh, logger.php error reports), <b>Logger</b> (event, tagName, page_url and dep
+                of every logger request) and <b>Elements</b> (script, player and banner div). Every test case runs for every tag and
+                gets PASS, WARNING or FAIL with its evidence. Video and banner run 11 test cases, offerwall 10.
+              </p>
+              <Segmented label="Watch period for slot refresh (TC-03)" options={WATCH_OPTIONS} value={watchSec} onChange={setWatchSec} disabled={busy} />
+            </>
+          )}
+
           {codeKind !== 'none' && (
           <div className="code-source">
             <div className="code-source-head">
@@ -312,16 +337,27 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
             />
             <Input
               id="tag"
-              label="Tag name"
-              placeholder="v-prabhatkhabar-v4"
+              label={implementation ? 'Tag name(s)' : 'Tag name'}
+              placeholder={implementation ? 'v-livemint, v-livemint-v1, b-livemint' : 'v-prabhatkhabar-v4'}
+              hint={implementation ? 'Separate several tags with commas. Each is tested on its own.' : undefined}
               value={tag}
               onChange={(e) => setTag(e.target.value)}
-              pattern="[\w-]+"
-              title="Letters, numbers, _ and -"
+              pattern={implementation ? '[\\w\\s,;\\-]+' : '[\\w\\-]+'}
+              title={implementation ? 'Tags of letters, numbers, _ and -, separated by commas' : 'Letters, numbers, _ and -'}
               required
               disabled={busy}
             />
           </div>
+
+          {implementation && tags.length > 0 && (
+            <div className="tag-chips" aria-label="Tags to test">
+              {tags.map((item) => (
+                <span key={item} className={`tag-chip unit-${unitOf(item)}`} title={`${UNIT_LABELS[unitOf(item)]} rules: ${UNIT_CASE_COUNT[unitOf(item)]} test cases`}>
+                  <b>{item}</b> {UNIT_LABELS[unitOf(item)]} · {UNIT_CASE_COUNT[unitOf(item)]} test cases
+                </span>
+              ))}
+            </div>
+          )}
 
           <div className="field">
             <div className="field-label-row">
@@ -356,7 +392,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
           )}
         </FormSection>
 
-        <FormSection step="3" title="Run settings" hint={sticky ? 'Devices to emulate. The sticky checker scrolls each page by its own plan.' : 'Devices to emulate and how the page is scrolled to trigger lazy loading.'}>
+        <FormSection step="3" title="Run settings" hint={sticky ? 'Devices to emulate. The sticky checker scrolls each page by its own plan.' : implementation ? 'Devices to emulate. The validator keeps the vdo.ai unit in view during the watch.' : 'Devices to emulate and how the page is scrolled to trigger lazy loading.'}>
           <div className="settings-row">
             <div className="field">
               <span className="field-label">Devices</span>
@@ -375,7 +411,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
               </div>
             </div>
 
-            {!sticky && (<>
+            {!ownScenario && (<>
             <Input
               id="scroll-ratio"
               type="number"
@@ -413,7 +449,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
           </div>
         </FormSection>
 
-        {!sticky && (
+        {!ownScenario && (
         <FormSection step="4" title="Test depth" className={deep ? 'form-block-deep' : ''}>
           <Toggle
             id="deep-test"
@@ -432,7 +468,7 @@ export default function NewCheckForm({ disabled, unavailable = false, deepEngine
         </FormSection>
         )}
 
-        {!sticky && (
+        {!ownScenario && (
         <FormSection step="5" title="Ad slot refresh check" hint="Optional, separate from the deep test." className={refreshIntervalSec ? 'form-block-deep' : ''}>
           <Toggle
             id="refresh-check"

@@ -19,6 +19,7 @@ const REASON_LABELS = {
   review_required: 'Review required',
   not_judged: 'Could not be judged',
   page_open_failed: 'Page could not be opened',
+  has_warnings: 'Warnings to review',
 };
 
 let pdfBrowserPromise = null;
@@ -252,8 +253,63 @@ function renderStickyResult(run, result, index, images) {
   </section>`;
 }
 
+// Implementation validator: per tag a summary line (8 PASS, 1 WARNING, 2 FAIL), then one row per test case with
+// its ID, result and evidence, grouped by step (Network, Logger, Elements).
+const UNIT_NAME = { video: 'Video', banner: 'Banner', offerwall: 'Offerwall' };
+
+function renderImplementationCase(c) {
+  const tone = VERDICT_CLASS[c.verdict] ?? 'unknown';
+  const lines = c.evidenceLines ?? [];
+  return `<tr class="${tone}">
+    <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(c.verdict)}</span></td>
+    <td><b>${escapeHtml(c.title)}</b><div class="plain">${escapeHtml(c.step)} · ${escapeHtml(c.checks)}</div></td>
+    <td><b>${escapeHtml(c.summary)}</b>${lines.length ? `<ul class="evidence">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>` : ''}${c.expectedScript ? `<div class="plain"><i>Expected:</i> ${escapeHtml(c.expectedScript)}</div>` : ''}</td>
+  </tr>`;
+}
+
+function renderImplementationTag(t) {
+  const tone = VERDICT_CLASS[t.overallVerdict] ?? 'unknown';
+  const fired = (t.events?.listed ?? []).filter((e) => e.count > 0).map((e) => `${e.name} ×${e.count}`);
+  const extra = (t.events?.extra ?? []).map((e) => `${e.name} ×${e.count}`);
+  return `<div class="deep">
+    <h3>${escapeHtml(t.tag)} <span class="badge unknown">${escapeHtml(UNIT_NAME[t.unit] ?? t.unit)}</span> <span class="badge ${tone}">Tag ${escapeHtml(t.overallVerdict)}</span> <span class="muted-note">${escapeHtml(t.summaryLine)}</span></h3>
+    <table class="cases"><thead><tr><th>ID</th><th>Test case</th><th>Result and evidence</th></tr></thead><tbody>${t.cases.map(renderImplementationCase).join('')}</tbody></table>
+    <p class="deep-h">Logger events recorded for ${escapeHtml(t.tag)} (${t.eventCount ?? 0})</p>
+    <p class="plain-p">${fired.length ? escapeHtml(fired.join(' · ')) : 'None of the listed events fired.'}${extra.length ? `<br>Other events: ${escapeHtml(extra.join(' · '))}` : ''}</p>
+  </div>`;
+}
+
+function renderImplementationResult(run, result, index, images) {
+  const impl = result.implementation;
+  const facts = [
+    ['Page', impl?.page ? `${impl.page.status ? `HTTP ${impl.page.status}` : 'no response'}${impl.page.title ? ` · ${impl.page.title}` : ''}` : '—'],
+    ['Loaded after', formatSeconds(impl?.page?.loadedAtMs)],
+    ['Watch period (TC-03)', formatSeconds(impl?.watchMs)],
+    ['vdo.ai.js requests', String(impl?.network?.scripts?.length ?? 0)],
+    ['Logger events read', String(impl?.network?.eventCount ?? 0)],
+    ['Duration', formatSeconds(result.durationMs)],
+    ...(result.error ? [['Error', result.error]] : []),
+  ];
+  return `
+  <section class="result ${result.status} has-deep">
+    <header>
+      <span class="badge ${result.status}">Implementation: ${result.status.toUpperCase()}</span>
+      ${(impl?.tags ?? []).map((t) => `<span class="badge ${VERDICT_CLASS[t.overallVerdict] ?? 'unknown'}">${escapeHtml(t.tag)}: ${escapeHtml(t.summaryLine)}</span>`).join('')}
+      ${offDomainBadge(run, result)}
+      <span class="index">#${index + 1}</span>
+      <span class="url">${escapeHtml(result.url)}</span>
+    </header>
+    ${result.reasons.length ? `<div class="reasons">${result.reasons.map((r) => `<span>${escapeHtml(REASON_LABELS[r] ?? r)}</span>`).join('')}</div>` : ''}
+    <dl>${facts.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
+    ${impl?.notes?.length ? `<ul class="notes">${impl.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul>` : ''}
+    ${images.length ? `<div class="shots">${images.map((img) => `<figure><img src="${img.src}" alt=""><figcaption>${escapeHtml(img.label)}</figcaption></figure>`).join('')}</div>` : ''}
+    ${(impl?.tags ?? []).map(renderImplementationTag).join('')}
+  </section>`;
+}
+
 function renderResult(run, result, index, images, deepImages) {
   if (run.type === 'sticky') return renderStickyResult(run, result, index, images);
+  if (run.type === 'implementation') return renderImplementationResult(run, result, index, images);
   const wrapper = result.wrapper;
   const hints = result.diagnostics?.hints ?? [];
   const facts = [
@@ -306,14 +362,19 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   const status = runStatus(run);
   const meta = [
     ['Domain', run.domain],
-    ['Check type', run.type === 'sticky' ? 'Sticky violation check (ST-01 to ST-25)' : run.type ?? 'vdo.ai.js'],
+    ['Check type', run.type === 'sticky' ? 'Sticky violation check (ST-01 to ST-25)' : run.type === 'implementation' ? 'Implementation validator (TC-01 to TC-13)' : run.type ?? 'vdo.ai.js'],
     ['Device', run.device],
     ['Started', formatDateTime(run.startedAt)],
     ['Duration', formatSeconds(new Date(run.finishedAt) - new Date(run.startedAt))],
     ['Script', run.script?.name ?? '—'],
     ...(run.allowOtherDomains ? [['URLs on other domains', otherDomainsText(run)]] : []),
-    ...(run.type === 'sticky' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
-    ...(run.type === 'sticky'
+    ...(run.type === 'sticky' || run.type === 'implementation' ? [] : [['Scroll', run.scroll ? `${run.scroll.stepViewportRatio} × screen every ${run.scroll.intervalMs} ms` : 'server default']]),
+    ...(run.type === 'implementation'
+      ? [
+          ['Tags tested', (run.tags ?? [run.tag]).join(', ')],
+          ['Watch period (TC-03)', `${run.watchSec ?? 30} s`],
+        ]
+      : run.type === 'sticky'
       ? [
           ['Code applied', run.stickyCode === 'none' || !run.stickyCode ? 'None (live tag as served)' : run.stickyCode],
           ['Additional checks', run.stickyAdditional ? 'Included (ST-14 to ST-25)' : 'Not included (mandatory ST-01 to ST-13 only)'],
@@ -324,12 +385,21 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
         ]),
   ];
   const sticky = run.type === 'sticky';
+  const implementation = run.type === 'implementation';
+  const kind = sticky ? 'Sticky violation check' : implementation ? 'Implementation validator' : 'Placement check';
+  const reportName = sticky ? 'Sticky violation report' : implementation ? 'Implementation validator report' : 'Placement report';
+  const sectionTitle = sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : implementation ? 'Implementation validator · TC-01 to TC-13 per tag and URL' : 'Custom placement check';
+  const sectionNote = sticky
+    ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings, which could not be judged, are left out): 80% or more passed = PASS, 50% to under 80% = PASS · Review required, under 50% = FAIL. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.'
+    : implementation
+      ? 'Counts URLs. Every test case runs for every tag in three steps (Network, Logger, Elements), even after a FAIL. A tag\'s result is the worst of its test cases: one FAIL fails the tag and the URL; a WARNING never does. Video and banner run 11 test cases, offerwall 10.'
+      : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.';
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${escapeHtml(run.tag)} placement report</title>
+<title>${escapeHtml(run.tag)} ${implementation ? 'implementation' : 'placement'} report</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font: 11px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #1c2128; }
@@ -404,17 +474,19 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   table.cases tr { break-inside: avoid; }
   table.cases td:first-child { white-space: nowrap; color: #5c6570; }
   .notes { margin: 2px 0 0; padding-left: 16px; color: #5c6570; }
+  ul.evidence { margin: 2px 0 0; padding-left: 14px; color: #3d4652; overflow-wrap: anywhere; }
+  .plain-p { margin: 0; color: #3d4652; font-size: 9.5px; }
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${sticky ? 'Sticky violation check' : 'Placement check'}: ${status.toUpperCase()}</span></h1>
-  <div class="sub">${sticky ? 'Sticky violation report' : 'Placement report'} · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
+  <h1>${escapeHtml(run.tag)} <span class="badge ${status}">${kind}: ${status.toUpperCase()}</span></h1>
+  <div class="sub">${reportName} · generated ${escapeHtml(formatDateTime(new Date().toISOString()))}</div>
   <dl class="meta">${meta.map(([k, v]) => `<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>
-  <h2 class="section-title">${sticky ? `Sticky violation check · ${run.stickyAdditional ? '25' : '13 mandatory'} checks per URL` : 'Custom placement check'}</h2>
-  <p class="section-note">${sticky ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings, which could not be judged, are left out): 80% or more passed = PASS, 50% to under 80% = PASS · Review required, under 50% = FAIL. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.' : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.'}</p>
+  <h2 class="section-title">${sectionTitle}</h2>
+  <p class="section-note">${sectionNote}</p>
   <div class="summary">
     <div><b>${run.passCount + run.failCount + run.errorCount}</b>URLs checked</div>
-    <div class="pass"><b>${run.passCount}</b>URLs passed${sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}</div>
+    <div class="pass"><b>${run.passCount}</b>URLs passed${sticky && run.reviewCount ? ` (${run.reviewCount} need review)` : ''}${implementation && run.warningCount ? ` (${run.warningCount} with warnings)` : ''}</div>
     <div class="fail"><b>${run.failCount}</b>URLs failed</div>
     <div class="error"><b>${run.errorCount}</b>URLs with errors</div>
   </div>
