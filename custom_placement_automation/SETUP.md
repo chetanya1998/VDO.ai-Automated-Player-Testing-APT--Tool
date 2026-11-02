@@ -96,13 +96,15 @@ On Windows (PowerShell): `Copy-Item server/.env.example server/.env`
 | `STICKY_URL_TIMEOUT_MS` | `180000` | Max time per URL for the sticky violation checker |
 | `IMPLEMENTATION_URL_TIMEOUT_MS` | `150000` | Max time per URL for the implementation validator (page load + watch + Elements search) |
 | `IMPLEMENTATION_LOAD_WINDOW_MS` | `10000` | vdo.ai.js loads within this time of the first one count as the page load (TC-02); later ones as a slot refresh (TC-03) |
+| `DEEP_OBSERVE_MS` | `15000` | Deep test observation time per URL |
+| `DEEP_URL_TIMEOUT_MS` | `90000` | Max time per URL for the deep test |
+| `DEEP_ALLOW_PRIVATE_NETWORK` | `false` | Allow deep tests on private-network pages (internal staging) |
 | `PLACEMENT_EVENT_SETTLE_MS` | `3000` | How long to keep listening after the first `vdo:placement` event |
 | `SCREENSHOT_SETTLE_MS` | `1200` | Pause before each screenshot so the player can settle |
 | `SCROLL_STEP_VIEWPORT_RATIO` | `0.45` | Default scroll step, as a fraction of the screen height |
 | `SCROLL_INTERVAL_MS` | `1600` | Default wait between scroll steps and between checks |
 | `MAX_CONCURRENT_JOBS` | `2` | Checks that may run at the same time; the rest queue |
 | `STORAGE_DIR` | `storage` | Where reports, screenshots and scripts are saved (relative to `server/`) |
-| `HOST` | all interfaces | Address the API listens on |
 
 ## 5. Start
 

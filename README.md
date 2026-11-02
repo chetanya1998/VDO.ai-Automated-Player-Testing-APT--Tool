@@ -7,7 +7,12 @@ It is built for QA, Ad Operations, Publisher Support, Player Engineering, and pu
 > **Current status — 22 October 2026:** the repository now contains **two applications** that share one PostgreSQL server:
 >
 > 1. **APT Validator** (repository root): all 23 case rules and the planned local product functions are implemented. It is in internal-pilot status and has not completed production deployment acceptance or validation against an approved live publisher corpus.
-> 2. **Placement Automation** (`custom_placement_automation/`): a local tool for testing custom `vdo.ai.js` placement code and `style.css` changes before a site goes live. It now has a durable PostgreSQL job queue, restart recovery, and a dashboard that checks Chromium can actually launch. The 23-case validators are **mapped but not yet connected** to it.
+> 2. **Placement Automation** (`custom_placement_automation/`): a local tool with four check types on one dashboard:
+>    - **custom placement** (`vdo.ai.js`) and **CSS** checks before a site goes live, with the optional 23-case **deep test**;
+>    - the **sticky violation checker** (ST-01 to ST-25);
+>    - the **implementation validator** (TC-01 to TC-13: Network, Logger and Elements checks of a live tag).
+>
+>    It has a durable PostgreSQL job queue, restart recovery, History and PDF reports.
 >
 > Neither application claims production accuracy or live publisher certification yet.
 
@@ -54,7 +59,7 @@ flowchart TB
       UI["React + Vite dashboard<br/>client/ · :5173"]
       EXP["Express API<br/>server/ · 127.0.0.1:3000"]
       QUEUE["Job queue<br/>jobQueue.service"]
-      RUNNER["Placement runner<br/>placementRunner + tagDiagnostics"]
+      RUNNER["Runners<br/>placement · sticky · implementation"]
       PDF["PDF reports<br/>pdfReport.service"]
       FILES[("server/storage<br/>screenshots · scripts")]
     end
@@ -75,15 +80,15 @@ flowchart TB
     RUNNER --> FILES
     EXP --> PDF
 
-    RULES -. "planned reuse<br/>(see roadmap)" .-> RUNNER
+    RULES -. "deep test<br/>(compiled engine)" .-> RUNNER
 ```
 
 | | APT Validator | Placement Automation |
 | --- | --- | --- |
-| Question it answers | "Is this live integration correct according to the 23 cases?" | "Does my new placement JS or CSS put the player on these pages?" |
-| Code under test | The publisher's real page and scripts | Your `vdo.ai.js` (replaces the tag's script) or `style.css` (injected) |
-| Input | Approved URL, integration profile, device | Domain, tag, up to 50 URLs, devices, uploaded/pasted code |
-| Output | 23 case verdicts, evidence timeline, probable causes, JSON/HTML report | PASS / FAIL / ERROR per URL, reasons, two screenshots, diagnostics, PDF |
+| Question it answers | "Is this live integration correct according to the 23 cases?" | "Does my new placement JS or CSS put the player on these pages?", "Does the floating player violate sticky rules?", "Is the live tag installed correctly (TC-01 to TC-13)?" |
+| Code under test | The publisher's real page and scripts | Your `vdo.ai.js` (replaces the tag's script) or `style.css` (injected), or the live tag as served |
+| Input | Approved URL, integration profile, device | Domain, tag(s), up to 50 URLs, devices, optional uploaded/pasted code |
+| Output | 23 case verdicts, evidence timeline, probable causes, JSON/HTML report | Per URL: PASS / FAIL / ERROR with reasons; per check type ST-01–25 or TC-01–13 results with evidence, screenshots, diagnostics, PDF |
 | Language / stack | TypeScript, Node 24+, `pnpm`, `playwright-core` | JavaScript, Node 20+, `npm`, Express, Playwright, React + Vite |
 | Access | Team tokens, team-scoped history | Local only (loopback, no login) |
 | Database | `validator_*` tables via `db/migrations` | Its own `custom_placement` schema, created on start |
@@ -244,21 +249,31 @@ erDiagram
 
 ## Application 2 — Placement Automation
 
-Placement Automation lets an engineer test new placement logic on real publisher pages **before** it ships. You give it a domain, a tag, a list of article URLs and either a `vdo.ai.js` build or a `style.css`. Full details are in [custom_placement_automation/README.md](custom_placement_automation/README.md).
+Placement Automation opens real publisher pages in Chrome/Chromium and checks the vdo.ai player on them. It can test new placement logic **before** it ships (a `vdo.ai.js` build or a `style.css`), check a floating player for sticky violations, or validate a live tag installation against TC-01 to TC-13. You give it a domain, the tag(s) and up to 50 article URLs. Full details, including how the tool tests every ST and TC case, are in [custom_placement_automation/README.md](custom_placement_automation/README.md).
 
-### Two kinds of checks
+### Four kinds of checks
 
 ```mermaid
 flowchart LR
     START["Check submitted"] --> TYPE{"Check type?"}
-    TYPE -->|vdo.ai.js| JS["Intercept a.vdo.ai/core/&lt;tag&gt;/vdo.ai.js<br/>and serve your file"]
+    TYPE -->|vdo.ai.js| JS["Serve your file for<br/>a.vdo.ai/core/&lt;tag&gt;/vdo.ai.js"]
     TYPE -->|style.css| CSS["Inject your CSS into &lt;head&gt;<br/>site's own vdo.ai.js runs"]
-    JS --> JSW["Wait for vdo:placement event<br/>+ visible wrapper<br/>(stops early, max 60 s)"]
-    CSS --> CSSW["Wait for visible wrapper<br/>(always full 60 s)"]
-    JSW --> SHOT["Screenshots: player centred,<br/>then scrolled past (floating)"]
-    CSSW --> SHOT
-    SHOT --> RES["PASS / FAIL / ERROR<br/>+ reasons + diagnostics"]
+    TYPE -->|sticky| ST["Walk the page like a reader:<br/>load, scroll, ad wait, bottom,<br/>sizes, close"]
+    TYPE -->|implementation| IV["Live tag, cache disabled:<br/>Network, Logger, Elements<br/>+ TC-03 watch"]
+    JS --> JSW["vdo:placement event<br/>+ visible wrapper"]
+    CSS --> CSSW["Visible wrapper"]
+    JSW --> RES["PASS / FAIL / ERROR per URL<br/>(+ optional 23-case deep test)"]
+    CSSW --> RES
+    ST --> STR["ST-01..ST-25: Pass / Fail / Warning<br/>with screenshot evidence"]
+    IV --> IVR["TC-01..TC-13 per tag:<br/>PASS / WARNING / FAIL / Not eligible<br/>with evidence"]
 ```
+
+| Check type | What it tests | Details |
+|---|---|---|
+| Custom placement (`vdo.ai.js`) | Your placement code puts a visible player on the page | [README](custom_placement_automation/README.md#custom-placement-and-css-checks) |
+| CSS (`style.css`) | The player stays visible with your CSS | [README](custom_placement_automation/README.md#custom-placement-and-css-checks) |
+| Sticky violation checker | 25 floating-player checks (ST-01 to ST-13 mandatory, ST-14 to ST-25 optional), and how each is tested | [README](custom_placement_automation/README.md#sticky-violation-checker-st-01-to-st-25) |
+| Implementation validator | 13 test cases for video, banner and offerwall tags (11 / 11 / 10), one or more tags per check, and how each is tested | [README](custom_placement_automation/README.md#implementation-validator-tc-01-to-tc-13) |
 
 For `vdo.ai.js` checks, your placement code reports its own outcome:
 
@@ -326,7 +341,9 @@ stateDiagram-v2
 
 Queued jobs resume after a restart. A job that was running is marked failed, with completed-device results kept, rather than silently replayed — a replay could re-serve an ad. A PostgreSQL advisory lock ensures only one server owns the schema at a time.
 
-### Result for one URL
+### Result for one URL (placement and CSS checks)
+
+The sticky checker and the implementation validator judge their own cases instead; see their sections in the [Placement Automation README](custom_placement_automation/README.md).
 
 ```mermaid
 flowchart TD
@@ -360,6 +377,9 @@ The chart shows the main path. In practice every failing condition is recorded, 
 | `services/jobQueue.service.js` | Bounded queue, concurrency limit, progress persistence, graceful drain |
 | `services/browser.service.js` | Shared Chromium, device profiles, cached launch readiness |
 | `services/placementRunner.service.js` | Opens pages, applies code, scrolls, detects placement, takes screenshots |
+| `services/deepValidation.service.js` | Runs the compiled 23-case engine for the deep test, the safe frame check and the refresh check |
+| `services/stickyRunner.service.js`, `services/sticky/` | Sticky violation checker: page scenario, in-page snapshots, ST-01 to ST-25 rules |
+| `services/implementationRunner.service.js`, `services/implementation/` | Implementation validator: network/logger/script capture with the cache disabled, Elements search, TC-01 to TC-13 rules per tag |
 | `services/tagDiagnostics.service.js` | Records `vdo.ai.js`, `vdo.min.js`, `ima3.js`, agent, analytics events, tag errors, console |
 | `services/results.service.js` | Saves runs to PostgreSQL and screenshots to disk |
 | `services/scriptStore.service.js` | Stores uploaded scripts for Re-run |
@@ -372,9 +392,9 @@ The chart shows the main path. In practice every failing condition is recorded, 
 | GET | `/api/health` | Liveness |
 | GET | `/api/ready` | Database, queue and real Chromium launch readiness (503 until all are ready) |
 | GET | `/api/settings` | Default scroll settings, limits and per-URL time limit |
-| POST | `/api/placement-checks` | Start a check; returns a job (429 when the queue is full) |
+| POST | `/api/placement-checks` | Start a check of any type (`"type": "vdo.ai.js" \| "style.css" \| "sticky" \| "implementation"`); returns a job (429 when the queue is full). Fields per type are in the [Placement Automation README](custom_placement_automation/README.md#api) |
 | GET | `/api/placement-checks/:jobId` | Job progress and results |
-| GET | `/api/history` | List runs (`?page=&pageSize=`) |
+| GET | `/api/history` | List runs (`?page=&pageSize=&q=&status=&type=&mode=deep`; `type` is `vdo.ai.js`, `style.css`, `sticky` or `implementation`) |
 | GET | `/api/history/:runId` | One run with its results |
 | GET | `/api/history/:runId/pdf` | Download the run as a PDF |
 | DELETE | `/api/history/:runId` | Delete one run and its screenshots |
@@ -452,7 +472,13 @@ Every result retains expected and observed values, evidence references, applicab
 
 Demand, publisher implementation, runtime/browser, configuration and coverage problems stay separate. A no-fill response is not automatically blamed on the publisher.
 
-**Placement Automation** reports `PASS`, `FAIL` or `ERROR` per URL with a reason code (`script_not_loaded`, `no_event_emitted`, `placement_failed`, `div_not_found`, `wrapper_hidden`, `page_blocked`, `timeout`, `page_closed`). These describe placement only, not the 23 cases.
+**Placement Automation** reports `PASS`, `FAIL` or `ERROR` per URL for every check type. Within that:
+
+| Check type | Results |
+| --- | --- |
+| Custom placement / CSS | Reason codes (`script_not_loaded`, `no_event_emitted`, `placement_failed`, `div_not_found`, `wrapper_hidden`, `page_blocked`, `timeout`, `page_closed`). They describe placement only; the 23 cases come from the optional deep test. |
+| Sticky violation checker | Each ST check is `PASS`, `FAIL` or `WARNING` (could not be judged). The URL is Pass with 80% or more of the judged checks passing, Pass · Review required at 50–80%, and Fail below 50%. |
+| Implementation validator | Each TC is `PASS`, `WARNING` or `FAIL`, or `Not eligible` when it does not apply to the tag's unit or the tag is not on the page. A tag's result is the worst of its test cases; a `WARNING` never fails it. |
 
 ## Getting started
 
@@ -494,7 +520,7 @@ npm start                               # API on 127.0.0.1:3000, UI on http://lo
 
 The dashboard enables checks only when `/api/ready` reports the database, queue and Chromium launch as ready. If Chromium is missing, run `npm --prefix server run browsers:install`; the dashboard picks it up automatically. See [SETUP.md](custom_placement_automation/SETUP.md) for troubleshooting.
 
-Database tests: set `TEST_DATABASE_URL` and run `npm --prefix server test`. They use an isolated `placement_test_*` schema that is removed afterwards.
+Database tests: set `TEST_DATABASE_URL` and run `npm --prefix server test`. They use an isolated `placement_test_*` schema that is removed afterwards. Real-browser tests against local fixture sites are opt-in: `STICKY_BROWSER_TEST=1` and `IMPLEMENTATION_BROWSER_TEST=1`.
 
 Further guides: [product guide](docs/product-guide.md), [API](docs/api.md), [dashboard](docs/dashboard.md), [batches](docs/batches.md), [report export](docs/report-export.md).
 
@@ -576,7 +602,7 @@ flowchart TB
 | Optional intelligence | 09–10, 19 | Backend verification, exact correlation, bounded AI explanation | Implemented locally; live integrations unverified |
 | Deployment hardening | 20 | Network safety, admission controls, health, credential separation, recovery | Application hardening done; deployment acceptance pending |
 | Pilot and release | 21 | Labelled-corpus evaluation and evidence-backed release decision | Evaluator implemented; real pilot inputs pending |
-| Placement Automation | — | Durable local placement backend, readiness, 23-case mapping | Stage 1 done; stage 2 in progress |
+| Placement Automation | — | Durable local backend, deep test (23 cases), sticky violation checker, implementation validator | Implemented locally; live publisher acceptance pending |
 
 The authoritative task order and handoff are in [TASKS.md](docs/plan/TASKS.md) and [STATUS.md](docs/plan/STATUS.md).
 
@@ -599,7 +625,7 @@ The authoritative task order and handoff are in [TASKS.md](docs/plan/TASKS.md) a
 
 - No approved production profile, live publisher corpus or real demand capture has been supplied.
 - Production service separation and Coolify deployment acceptance are not complete.
-- The 23 cases are not yet executed by Placement Automation; its PASS covers placement only.
+- In Placement Automation, a placement PASS covers placement only; the 23 cases run only when the deep test is on. The sticky checker and implementation validator are verified on local fixture pages and unit tests, and still need acceptance on live publisher pages.
 - Placement Automation has no login, does not resume a URL interrupted mid-run, and some sites block automated browsers (`page_blocked`). `script_not_loaded` is common where the ad slot does not always fill.
 - Real iOS/Safari evidence is required for iOS-specific conclusions; Chromium mobile emulation does not replace it.
 - Some thresholds and lifecycle rules remain draft until product owners confirm decisions D01–D14.
