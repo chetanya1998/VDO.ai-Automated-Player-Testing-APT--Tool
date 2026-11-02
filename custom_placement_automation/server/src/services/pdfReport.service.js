@@ -95,8 +95,8 @@ function describeEvent(run, result) {
   return 'received';
 }
 
-const VERDICT_CLASS = { PASS: 'pass', FAIL: 'fail', WARNING: 'warn', UNKNOWN: 'unknown', NOT_APPLICABLE: 'na' };
-const VERDICT_LABEL = { PASS: 'Pass', FAIL: 'Fail', WARNING: 'Warning', UNKNOWN: 'Unknown', NOT_APPLICABLE: 'N/A' };
+const VERDICT_CLASS = { PASS: 'pass', FAIL: 'fail', WARNING: 'warn', UNKNOWN: 'unknown', NOT_APPLICABLE: 'na', NOT_ELIGIBLE: 'na' };
+const VERDICT_LABEL = { PASS: 'Pass', FAIL: 'Fail', WARNING: 'Warning', UNKNOWN: 'Unknown', NOT_APPLICABLE: 'N/A', NOT_ELIGIBLE: 'Not eligible' };
 const VERDICT_ORDER = ['PASS', 'FAIL', 'WARNING', 'UNKNOWN', 'NOT_APPLICABLE'];
 
 const VERDICT_HELP = {
@@ -261,7 +261,7 @@ function renderImplementationCase(c) {
   const tone = VERDICT_CLASS[c.verdict] ?? 'unknown';
   const lines = c.evidenceLines ?? [];
   return `<tr class="${tone}">
-    <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(c.verdict)}</span></td>
+    <td class="case-id">${escapeHtml(c.id)}<span class="badge ${tone}">${escapeHtml(c.verdict === 'NOT_ELIGIBLE' ? 'NOT ELIGIBLE' : c.verdict)}</span></td>
     <td><b>${escapeHtml(c.title)}</b><div class="plain">${escapeHtml(c.step)} · ${escapeHtml(c.checks)}</div></td>
     <td><b>${escapeHtml(c.summary)}</b>${lines.length ? `<ul class="evidence">${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('')}</ul>` : ''}${c.expectedScript ? `<div class="plain"><i>Expected:</i> ${escapeHtml(c.expectedScript)}</div>` : ''}</td>
   </tr>`;
@@ -269,10 +269,17 @@ function renderImplementationCase(c) {
 
 function renderImplementationTag(t) {
   const tone = VERDICT_CLASS[t.overallVerdict] ?? 'unknown';
+  // A tag that is not on this page is not tested here: one line instead of 13 not-eligible rows.
+  if (t.eligible === false) {
+    return `<div class="deep">
+    <h3>${escapeHtml(t.tag)} <span class="badge unknown">${escapeHtml(UNIT_NAME[t.unit] ?? t.unit)}</span> <span class="badge na">Not eligible on this page</span></h3>
+    <p class="plain-p">${escapeHtml(t.notEligibleReason)}</p>
+  </div>`;
+  }
   const fired = (t.events?.listed ?? []).filter((e) => e.count > 0).map((e) => `${e.name} ×${e.count}`);
   const extra = (t.events?.extra ?? []).map((e) => `${e.name} ×${e.count}`);
   return `<div class="deep">
-    <h3>${escapeHtml(t.tag)} <span class="badge unknown">${escapeHtml(UNIT_NAME[t.unit] ?? t.unit)}</span> <span class="badge ${tone}">Tag ${escapeHtml(t.overallVerdict)}</span> <span class="muted-note">${escapeHtml(t.summaryLine)}</span></h3>
+    <h3>${escapeHtml(t.tag)} <span class="badge unknown">${escapeHtml(UNIT_NAME[t.unit] ?? t.unit)}</span> <span class="badge ${tone}">Tag ${escapeHtml(t.overallVerdict)}</span><span class="badge unknown">${t.total} test cases run</span> <span class="muted-note">${escapeHtml(t.summaryLine)}</span></h3>
     <table class="cases"><thead><tr><th>ID</th><th>Test case</th><th>Result and evidence</th></tr></thead><tbody>${t.cases.map(renderImplementationCase).join('')}</tbody></table>
     <p class="deep-h">Logger events recorded for ${escapeHtml(t.tag)} (${t.eventCount ?? 0})</p>
     <p class="plain-p">${fired.length ? escapeHtml(fired.join(' · ')) : 'None of the listed events fired.'}${extra.length ? `<br>Other events: ${escapeHtml(extra.join(' · '))}` : ''}</p>
@@ -294,7 +301,7 @@ function renderImplementationResult(run, result, index, images) {
   <section class="result ${result.status} has-deep">
     <header>
       <span class="badge ${result.status}">Implementation: ${result.status.toUpperCase()}</span>
-      ${(impl?.tags ?? []).map((t) => `<span class="badge ${VERDICT_CLASS[t.overallVerdict] ?? 'unknown'}">${escapeHtml(t.tag)}: ${escapeHtml(t.summaryLine)}</span>`).join('')}
+      ${(impl?.tags ?? []).map((t) => `<span class="badge ${VERDICT_CLASS[t.overallVerdict] ?? 'unknown'}">${escapeHtml(t.tag)} (${escapeHtml(UNIT_NAME[t.unit] ?? t.unit)}): ${escapeHtml(t.summaryLine)}</span>`).join('')}
       ${offDomainBadge(run, result)}
       <span class="index">#${index + 1}</span>
       <span class="url">${escapeHtml(result.url)}</span>
@@ -392,7 +399,7 @@ function renderReport(run, imagesByResult, deepImagesByResult) {
   const sectionNote = sticky
     ? 'Counts URLs. Each URL is judged on the share of its checks that passed (warnings, which could not be judged, are left out): 80% or more passed = PASS, 50% to under 80% = PASS · Review required, under 50% = FAIL. These are internal preventative QA checks, not official Google violation triggers: a failure needs investigation, and passing does not guarantee policy compliance.'
     : implementation
-      ? 'Counts URLs. Every test case runs for every tag in three steps (Network, Logger, Elements), even after a FAIL. A tag\'s result is the worst of its test cases: one FAIL fails the tag and the URL; a WARNING never does. Video and banner run 11 test cases, offerwall 10.'
+      ? 'Counts URLs. Each tag found on a page is tested as its own instance with the test cases of its unit, in three steps (Network, Logger, Elements), even after a FAIL. Test cases of another unit are listed as not eligible; with several tags, a tag that is not on a page is not eligible there instead of failing. A tag\'s result is the worst of its test cases: one FAIL fails the tag and the URL; a WARNING never does. Video and banner run 11 test cases, offerwall 10.'
       : 'Counts URLs. A URL passes when your placement code puts a visible player on the page.';
 
   return `<!doctype html>

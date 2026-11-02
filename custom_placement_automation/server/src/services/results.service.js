@@ -83,7 +83,7 @@ export async function saveRun({ type, tag, domain, scroll, scriptId, scriptName,
         perUrl: results.map((r) => ({
           url: r.url,
           status: r.status,
-          tags: (r.implementation?.tags ?? []).map((t) => ({ tag: t.tag, unit: t.unit, overallVerdict: t.overallVerdict, verdictCounts: t.verdictCounts, total: t.total })),
+          tags: (r.implementation?.tags ?? []).map((t) => ({ tag: t.tag, unit: t.unit, eligible: t.eligible !== false, overallVerdict: t.overallVerdict, verdictCounts: t.verdictCounts, total: t.total })),
         })),
       },
     } : {}),

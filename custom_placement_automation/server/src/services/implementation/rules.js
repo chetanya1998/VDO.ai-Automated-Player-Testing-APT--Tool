@@ -2,6 +2,8 @@
 // evidence in the browser, and everything here judges it, so each rule can be tested without a browser.
 import {
   BLOCKING_ERROR_CODES,
+  IMPLEMENTATION_CASES,
+  UNIT_LABELS,
   DEFAULT_DEP,
   EVENT_DEFINITIONS,
   EXPECTED_EVENTS,
@@ -11,9 +13,11 @@ import {
   casesFor,
 } from './guide.js';
 
-export const VERDICT = { PASS: 'PASS', WARNING: 'WARNING', FAIL: 'FAIL' };
+// NOT_ELIGIBLE: the test case does not apply to this tag's unit, or the tag is not on this page. It is shown so the
+// report is complete, but it is never a result: it does not count towards PASS, WARNING or FAIL.
+export const VERDICT = { PASS: 'PASS', WARNING: 'WARNING', FAIL: 'FAIL', NOT_ELIGIBLE: 'NOT_ELIGIBLE' };
 const RANK = { PASS: 0, WARNING: 1, FAIL: 2 };
-export const worst = (verdicts) => verdicts.reduce((acc, v) => (RANK[v] > RANK[acc] ? v : acc), VERDICT.PASS);
+export const worst = (verdicts) => verdicts.filter((v) => v in RANK).reduce((acc, v) => (RANK[v] > RANK[acc] ? v : acc), VERDICT.PASS);
 
 // ---------- Tags and units ----------
 
@@ -399,8 +403,27 @@ function eventsRecorded(unit, events) {
   return { listed, extra: Object.entries(extra).map(([name, count]) => ({ name, count })) };
 }
 
-// Every test case of the unit runs, even after a FAIL, each on its own evidence. The tag's result is the worst one.
-export function evaluateTag({ tag, evidence, otherFloatingTags = 0 }) {
+// Did the tag leave any trace on the page: a vdo.ai.js request or script for it, a logger event with its tagName, or a
+// logger.php report naming it.
+export function tagPresent(tag, evidence) {
+  const elements = evidence.elements ?? {};
+  return (evidence.scripts ?? []).some((s) => s.tag === tag)
+    || (evidence.scriptElements ?? []).some((e) => e.tag === tag)
+    || (elements.scripts ?? []).some((s) => s.tag === tag)
+    || (evidence.events ?? []).some((e) => e.tagName === tag)
+    || (evidence.errorReports ?? []).some((r) => r.tag === tag);
+}
+
+const unitList = (units) => units.map((u) => UNIT_LABELS[u].toLowerCase()).join(' and ');
+
+function notEligible(item, summary) {
+  return { id: item.id, step: item.step, title: item.title, checks: item.checks, expected: item.expected, verdict: VERDICT.NOT_ELIGIBLE, summary, meaning: IMPLEMENTATION_MEANING.NOT_ELIGIBLE, evidence: null, evidenceLines: [] };
+}
+
+// Each tag is its own instance: every one of the 13 test cases is listed. Those of its unit run (even after a FAIL, each
+// on its own evidence) and the tag's result is the worst of them; the others are marked not eligible.
+// absentReason: set when the tag is not on this page while another entered tag is, so none of its cases is eligible.
+export function evaluateTag({ tag, evidence, otherFloatingTags = 0, absentReason = null }) {
   const unit = unitOf(tag);
   // Rule 6: only the events whose tagName is the tag being tested.
   const events = (evidence.events ?? []).filter((e) => e.tagName === tag);
@@ -416,7 +439,15 @@ export function evaluateTag({ tag, evidence, otherFloatingTags = 0 }) {
     watchMs: evidence.watchMs,
     otherFloatingTags,
   };
-  const cases = casesFor(unit).map((item) => {
+  const eligibleIds = new Set(casesFor(unit).map((item) => item.id));
+  const cases = IMPLEMENTATION_CASES.map((item) => {
+    if (absentReason) return notEligible(item, absentReason);
+    if (!eligibleIds.has(item.id)) {
+      const why = item.id === 'TC-08' && unit === UNITS.VIDEO
+        ? 'Not eligible for video tags: the validator records which video events fired (see the logger events below), and a missing or extra event does not change the result.'
+        : `Not eligible: ${item.id} applies to ${unitList(item.units)} tags only, and ${tag} is a ${UNIT_LABELS[unit].toLowerCase()} tag.`;
+      return notEligible(item, why);
+    }
     const outcome = RULES[item.id](input);
     return {
       id: item.id,
@@ -432,27 +463,42 @@ export function evaluateTag({ tag, evidence, otherFloatingTags = 0 }) {
       ...(outcome.expected ? { expectedScript: outcome.expected } : {}),
     };
   });
-  const verdictCounts = { PASS: 0, WARNING: 0, FAIL: 0 };
+  const verdictCounts = { PASS: 0, WARNING: 0, FAIL: 0, NOT_ELIGIBLE: 0 };
   for (const item of cases) verdictCounts[item.verdict] += 1;
+  const total = cases.length - verdictCounts.NOT_ELIGIBLE;
   return {
     tag,
     unit,
-    overallVerdict: worst(cases.map((item) => item.verdict)),
+    eligible: !absentReason,
+    ...(absentReason ? { notEligibleReason: absentReason } : {}),
+    overallVerdict: absentReason ? VERDICT.NOT_ELIGIBLE : worst(cases.map((item) => item.verdict)),
     verdictCounts,
-    total: cases.length,
-    summaryLine: `${verdictCounts.PASS} PASS, ${verdictCounts.WARNING} WARNING, ${verdictCounts.FAIL} FAIL`,
+    total,
+    summaryLine: absentReason
+      ? 'Not eligible on this page'
+      : `${verdictCounts.PASS} PASS, ${verdictCounts.WARNING} WARNING, ${verdictCounts.FAIL} FAIL · ${verdictCounts.NOT_ELIGIBLE} not eligible`,
     cases,
     events: eventsRecorded(unit, events),
     eventCount: events.length,
   };
 }
 
-// All tags tested on one URL. Each tag is tested on its own; two different tags on one page are not duplicates.
+// All tags tested on one URL, each as its own instance with its own unit's test cases; two different tags on one page
+// are not duplicates. In a run with several tags, a tag with no trace on this page while another entered tag is there
+// is not eligible on this page (it is not reported as failing). When none of the tags is on the page, every tag is
+// tested, so a missing installation still fails TC-01.
 export function evaluateImplementation({ tags, evidence }) {
   const elements = evidence.elements ?? {};
+  const present = tags.filter((t) => tagPresent(t, evidence));
   const floatingTags = tags.filter((t) => unitOf(t) === UNITS.VIDEO
     && (evidence.scripts ?? []).some((s) => s.tag === t && s.status === 200)
     && !(elements.wrappers?.[t] ?? []).some((w) => w.hasPlayer));
-  const results = tags.map((tag) => evaluateTag({ tag, evidence, otherFloatingTags: floatingTags.filter((t) => t !== tag).length }));
-  return { overallVerdict: worst(results.map((r) => r.overallVerdict)), tags: results };
+  const results = tags.map((tag) => {
+    const absentReason = present.length > 0 && !present.includes(tag)
+      ? `Not eligible on this page: ${tag} was not found here (no vdo.ai.js request or script for it and no logger event with its tagName), while ${present.join(', ')} ${present.length === 1 ? 'was' : 'were'}. Only the tags on this page are tested.`
+      : null;
+    return evaluateTag({ tag, evidence, otherFloatingTags: floatingTags.filter((t) => t !== tag).length, absentReason });
+  });
+  const eligible = results.filter((r) => r.eligible);
+  return { overallVerdict: worst(eligible.map((r) => r.overallVerdict)), tags: results, testedTags: eligible.map((r) => r.tag), notEligibleTags: results.filter((r) => !r.eligible).map((r) => r.tag) };
 }

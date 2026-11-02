@@ -173,7 +173,9 @@ Each page is opened in Chromium with the cache disabled (like DevTools with *Dis
 | TC-12 | Player present once | Elements | ✓ | | | FAIL: neither the in-content `<tag>-0` wrapper nor a floating `vdo_floating` player, or more than one |
 | TC-13 | Banner div present | Elements | | ✓ | | WARNING: no div whose id holds the tag with underscores |
 
-**Results.** Only PASS, WARNING and FAIL. A tag's result is the worst of its test cases; one FAIL fails the tag and the URL, and a WARNING never does. The report shows a summary line per tag (for example *8 PASS, 1 WARNING, 2 FAIL*), then one row per test case with its ID, result and evidence: the request URL and status, the event name and `page_url`, the error code and `msg`, or the `dep` value. Every logger event the tag sent is also listed (video's TC-08 is recorded this way).
+**Results.** PASS, WARNING and FAIL, plus **Not eligible**. A tag's result is the worst of its test cases; one FAIL fails the tag and the URL, and a WARNING never does.
+
+**Not eligible.** Each tag is its own instance and lists all 13 test cases. Those its unit does not run are marked *Not eligible*, with the reason (for example TC-12 on a banner tag: it applies to video tags only). They are never a result and never change the tag or URL result. With several tags, each tag found on a page is tested with its own unit's test cases. A video, a banner and an offerwall tag on one page give three separate results. A tag with no trace on a page (no vdo.ai.js request or script for it and no logger event with its tagName) while another entered tag is there is *Not eligible on this page* instead of failing. When none of the entered tags is on a page, they are all tested, so a missing installation still fails TC-01. The report shows a summary line per tag (for example *8 PASS, 1 WARNING, 2 FAIL*), then one row per test case with its ID, result and evidence: the request URL and status, the event name and `page_url`, the error code and `msg`, or the `dep` value. Every logger event the tag sent is also listed (video's TC-08 is recorded this way).
 
 How the evidence is read:
 

@@ -48,7 +48,7 @@ const BASE_COLUMNS = [
         {/* Implementation runs: each tag's result per URL, never summed across URLs. */}
         {(run.implementationSummary?.perUrl ?? []).slice(0, 3).flatMap((item, i, all) => item.tags.map((t) => (
           <small key={`${item.url}-${i}-${t.tag}`}>
-            {all.length > 1 ? `URL ${i + 1} · ` : ''}{t.tag}: {t.overallVerdict === 'PASS' ? 'Pass' : t.overallVerdict === 'WARNING' ? 'Warning' : 'Fail'} · {t.verdictCounts.PASS} pass, {t.verdictCounts.WARNING} warning, {t.verdictCounts.FAIL} fail
+            {all.length > 1 ? `URL ${i + 1} · ` : ''}{t.tag}: {t.eligible === false || t.overallVerdict === 'NOT_ELIGIBLE' ? 'Not eligible on this URL' : `${t.overallVerdict === 'PASS' ? 'Pass' : t.overallVerdict === 'WARNING' ? 'Warning' : 'Fail'} · ${t.verdictCounts.PASS} pass, ${t.verdictCounts.WARNING} warning, ${t.verdictCounts.FAIL} fail`}
           </small>
         )))}
       </span>

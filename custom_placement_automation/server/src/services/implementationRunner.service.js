@@ -214,9 +214,12 @@ export async function runImplementationChecks({ tags, device, urls, watchSec = 3
       } else {
         result.status = evaluation.overallVerdict === 'FAIL' ? STATUS.FAIL : STATUS.PASS;
         const several = tags.length > 1;
-        result.reasons = evaluation.overallVerdict === 'FAIL'
-          ? evaluation.tags.flatMap((t) => t.cases.filter((c) => c.verdict === 'FAIL').map((c) => (several ? `${t.tag} · ${c.id}` : c.id)))
-          : evaluation.overallVerdict === 'WARNING' ? ['has_warnings'] : [];
+        result.reasons = [
+          ...(evaluation.overallVerdict === 'FAIL'
+            ? evaluation.tags.flatMap((t) => t.cases.filter((c) => c.verdict === 'FAIL').map((c) => (several ? `${t.tag} · ${c.id}` : c.id)))
+            : evaluation.overallVerdict === 'WARNING' ? ['has_warnings'] : []),
+          ...evaluation.notEligibleTags.map((t) => `${t} · not on this page`),
+        ];
       }
     } catch (error) {
       result.error = error.message.split('\n')[0];
@@ -226,7 +229,7 @@ export async function runImplementationChecks({ tags, device, urls, watchSec = 3
       await context.close().catch(() => {});
     }
     result.durationMs = Date.now() - urlStarted;
-    const summary = result.implementation?.tags.map((t) => `${t.tag}: ${t.summaryLine}`).join(' | ');
+    const summary = result.implementation?.tags.map((t) => `${t.tag} (${t.unit}): ${t.summaryLine}`).join(' | ');
     logger.info(`[IMPLEMENTATION ${result.status.toUpperCase()}] ${url} (${device}) ${summary ?? result.error ?? result.reasons.join(',')}`);
     results.push(result);
     await onUrlDone();

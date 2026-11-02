@@ -74,4 +74,5 @@ export const IMPLEMENTATION_MEANING = {
   PASS: 'The test case is met.',
   WARNING: 'The unit may still work, but the team should look. A WARNING never makes the tag FAIL.',
   FAIL: 'An implementation, blocking or logger problem. One FAIL makes the tag FAIL.',
+  NOT_ELIGIBLE: 'This test case does not apply here (another unit, or the tag is not on this page). It is not a result and never changes the tag result.',
 };

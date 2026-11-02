@@ -6,6 +6,7 @@ export const VERDICT_LABELS = {
   WARNING: 'Warning',
   UNKNOWN: 'Unknown',
   NOT_APPLICABLE: 'N/A',
+  NOT_ELIGIBLE: 'Not eligible',
 };
 
 export const VERDICT_TONES = {
@@ -14,6 +15,7 @@ export const VERDICT_TONES = {
   WARNING: 'warn',
   UNKNOWN: 'unknown',
   NOT_APPLICABLE: 'na',
+  NOT_ELIGIBLE: 'na',
 };
 
 // What each result means, in plain words (shown as tooltips and in the legend).
@@ -23,6 +25,7 @@ export const VERDICT_HELP = {
   WARNING: 'Warning: it works, but something needs attention.',
   UNKNOWN: 'Unknown: the tool could not decide, usually because the rules are not signed off yet or the page gave too little data.',
   NOT_APPLICABLE: 'N/A: this check does not apply to this page or device.',
+  NOT_ELIGIBLE: 'Not eligible: this test case does not apply to this tag (another unit, or the tag is not on this page). It never changes the result.',
 };
 
 export const verdictLabel = (verdict) => VERDICT_LABELS[verdict] ?? verdict;

@@ -65,7 +65,8 @@ test('a healthy video, banner and offerwall pass every test case they run', () =
   for (const tag of ['v-koimoi-v1', 'b-tayyar-org-v1', 'o-metbeatnews']) {
     const result = evaluateTag({ tag, evidence: evidence(tag) });
     assert.equal(result.overallVerdict, 'PASS', `${tag}: ${JSON.stringify(result.cases.filter((c) => c.verdict !== 'PASS'))}`);
-    assert.equal(result.summaryLine, `${result.total} PASS, 0 WARNING, 0 FAIL`);
+    assert.equal(result.summaryLine, `${result.total} PASS, 0 WARNING, 0 FAIL · ${13 - result.total} not eligible`);
+    assert.equal(result.cases.length, 13, 'every tag lists all 13 test cases');
   }
 });
 
@@ -94,7 +95,7 @@ test('reference examples from section 8 of the test case document', () => {
   // metbeatnews: the offerwall script with id vdo-ai-o-metbeatnews → TC-11 PASS; offerwall never runs TC-13.
   const met = evaluateTag({ tag: 'o-metbeatnews', evidence: evidence('o-metbeatnews') });
   assert.equal(verdicts(met)['TC-11'], 'PASS');
-  assert.equal(verdicts(met)['TC-13'], undefined);
+  assert.equal(verdicts(met)['TC-13'], 'NOT_ELIGIBLE');
 });
 
 test('TC-01 names the problem: missing, wrong unit prefix, another site, bad status, blocked', () => {
@@ -202,9 +203,60 @@ test('TC-11 script once, TC-12 player once (with floating attribution), TC-13 ba
 
 test('every test case runs after a FAIL, and the tag result is the worst one', () => {
   const result = evaluateTag({ tag: 'v-x', evidence: { scripts: [], errorReports: [], events: [], elements: {}, loadWindowMs: 10000, watchMs: 30000 } });
-  assert.equal(result.cases.length, 11);
+  assert.equal(result.total, 11);
   assert.equal(result.overallVerdict, 'FAIL');
   assert.ok(result.cases.every((c) => c.summary && c.verdict), 'each test case has its own result and evidence text');
+});
+
+test('test cases of another unit are listed as not eligible and never change the result', () => {
+  const expected = {
+    'v-x': ['TC-08', 'TC-13'],
+    'b-x': ['TC-09', 'TC-12'],
+    'o-x': ['TC-09', 'TC-12', 'TC-13'],
+  };
+  for (const [tag, ids] of Object.entries(expected)) {
+    const result = evaluateTag({ tag, evidence: evidence(tag) });
+    assert.deepEqual(result.cases.filter((c) => c.verdict === 'NOT_ELIGIBLE').map((c) => c.id), ids, tag);
+    assert.equal(result.verdictCounts.NOT_ELIGIBLE, ids.length);
+    assert.equal(result.overallVerdict, 'PASS');
+  }
+  const banner = evaluateTag({ tag: 'b-x', evidence: evidence('b-x') });
+  assert.match(banner.cases.find((c) => c.id === 'TC-12').summary, /applies to video tags only, and b-x is a banner tag/);
+  assert.match(evaluateTag({ tag: 'v-x', evidence: evidence('v-x') }).cases.find((c) => c.id === 'TC-08').summary, /records which video events fired/);
+});
+
+test('with several tags, each tag on the page is its own instance; a tag not on the page is not eligible there', () => {
+  // Only the video tag is on this page: the banner and offerwall tags are not eligible, not failing.
+  const onlyVideo = evaluateImplementation({ tags: ['v-site', 'b-site', 'o-site'], evidence: evidence('v-site') });
+  assert.deepEqual(onlyVideo.tags.map((t) => [t.tag, t.overallVerdict]), [['v-site', 'PASS'], ['b-site', 'NOT_ELIGIBLE'], ['o-site', 'NOT_ELIGIBLE']]);
+  assert.equal(onlyVideo.overallVerdict, 'PASS');
+  assert.deepEqual(onlyVideo.testedTags, ['v-site']);
+  const banner = onlyVideo.tags[1];
+  assert.ok(banner.cases.every((c) => c.verdict === 'NOT_ELIGIBLE') && banner.total === 0);
+  assert.match(banner.notEligibleReason, /b-site was not found here .* while v-site was/);
+
+  // All three units on one page: each runs its own unit's test cases.
+  const all = ['v-site', 'b-site', 'o-site'];
+  const merged = {
+    scripts: all.map((t) => script(t)),
+    errorReports: [],
+    events: all.flatMap((t) => healthyEvents(t)),
+    elements: {
+      scripts: all.map((t) => elementsFor(t).scripts[0]),
+      wrappers: { 'v-site': elementsFor('v-site').wrappers['v-site'], 'b-site': [], 'o-site': [] },
+      floating: [],
+      bannerDivs: { 'b-site': ['b_site_Anchor_Top_1'], 'v-site': [], 'o-site': [] },
+    },
+    loadWindowMs: 10000,
+    watchMs: 30000,
+  };
+  const three = evaluateImplementation({ tags: all, evidence: merged });
+  assert.deepEqual(three.tags.map((t) => [t.tag, t.unit, t.overallVerdict, t.total]), [['v-site', 'video', 'PASS', 11], ['b-site', 'banner', 'PASS', 11], ['o-site', 'offerwall', 'PASS', 10]]);
+
+  // None of the entered tags is on the page: they are all tested, so the missing installation still fails.
+  const none = evaluateImplementation({ tags: ['v-site', 'b-site'], evidence: { scripts: [], errorReports: [], events: [], elements: {}, loadWindowMs: 10000, watchMs: 30000 } });
+  assert.deepEqual(none.tags.map((t) => t.overallVerdict), ['FAIL', 'FAIL']);
+  assert.equal(none.overallVerdict, 'FAIL');
 });
 
 test('live implementation checks on local video, banner and offerwall pages', { skip: process.env.IMPLEMENTATION_BROWSER_TEST ? false : 'set IMPLEMENTATION_BROWSER_TEST=1 (opens a real browser, about 1.5 minutes)' }, async () => {
@@ -216,7 +268,7 @@ test('live implementation checks on local video, banner and offerwall pages', { 
     const video = await runImplementationChecks({ tags: [TAGS.video], device: 'desktop', urls: [site.url('video-good'), site.url('video-bad')], watchSec: 15, prepareContext: routeVdo });
     const [good, bad] = video.results;
     assert.equal(good.status, 'pass', JSON.stringify(good.implementation?.tags[0].cases.filter((c) => c.verdict !== 'PASS')));
-    assert.equal(good.implementation.tags[0].summaryLine, '11 PASS, 0 WARNING, 0 FAIL');
+    assert.equal(good.implementation.tags[0].summaryLine, '11 PASS, 0 WARNING, 0 FAIL · 2 not eligible');
     assert.equal(bad.status, 'fail');
     const badVerdicts = verdicts(bad.implementation.tags[0]);
     for (const id of ['TC-02', 'TC-03', 'TC-04', 'TC-05', 'TC-07', 'TC-11', 'TC-12']) assert.equal(badVerdicts[id], 'FAIL', `${id}: ${bad.implementation.tags[0].cases.find((c) => c.id === id).summary}`);
@@ -227,7 +279,9 @@ test('live implementation checks on local video, banner and offerwall pages', { 
     const others = await runImplementationChecks({ tags: [TAGS.banner, TAGS.offerwall], device: 'mobile', urls: [site.url('banner-good'), site.url('offerwall-bad')], watchSec: 5, prepareContext: routeVdo });
     const [bannerPage, offerPage] = others.results.map((r) => Object.fromEntries(r.implementation.tags.map((t) => [t.tag, t])));
     assert.equal(bannerPage[TAGS.banner].overallVerdict, 'PASS', JSON.stringify(bannerPage[TAGS.banner].cases.filter((c) => c.verdict !== 'PASS')));
-    assert.equal(verdicts(bannerPage[TAGS.offerwall])['TC-01'], 'FAIL', 'the offerwall tag is not on the banner page');
+    assert.equal(bannerPage[TAGS.offerwall].overallVerdict, 'NOT_ELIGIBLE', 'the offerwall tag is not on the banner page');
+    assert.equal(offerPage[TAGS.banner].overallVerdict, 'NOT_ELIGIBLE', 'the banner tag is not on the offerwall page');
+    assert.deepEqual(others.results.map((r) => r.status), ['pass', 'fail']);
     const offer = verdicts(offerPage[TAGS.offerwall]);
     assert.deepEqual([offer['TC-01'], offer['TC-05'], offer['TC-08'], offer['TC-11']], ['PASS', 'FAIL', 'WARNING', 'PASS']);
   } finally {
