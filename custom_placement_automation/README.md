@@ -529,6 +529,8 @@ Every URL must be on the publisher **domain** or one of its subdomains (`www.`, 
 
 ## Quick start: one command
 
+> **Team installation and updates:** [INSTALL-AND-UPDATE.md](../INSTALL-AND-UPDATE.md) (Windows, macOS, Linux, updates, test branches, rollback). **AI assistant installation:** [LLM-INSTALL-INSTRUCTIONS.md](../LLM-INSTALL-INSTRUCTIONS.md). **What changed:** [CHANGELOG.md](../CHANGELOG.md).
+
 After installing **Git, Node.js 24 LTS (22+), PostgreSQL and Google Chrome** once, clone the repository and run, from the repository root or from this folder:
 
 ```bash

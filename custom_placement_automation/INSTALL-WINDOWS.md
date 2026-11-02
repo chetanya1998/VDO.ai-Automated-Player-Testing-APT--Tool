@@ -1,6 +1,6 @@
 # Windows installation, step by step
 
-This guide installs Placement Automation on Windows: the placement checks, the 23-case **deep test** and the **sticky violation checker**. After the software in Part 1 is installed, one command does everything else: updating, installing, building, setting up the database and starting the tool.
+This guide installs Placement Automation on Windows: the placement checks, the 23-case **deep test**, the **sticky violation checker** and the **implementation validator**. For the team's update procedure, macOS and Linux, see [INSTALL-AND-UPDATE.md](../INSTALL-AND-UPDATE.md). To let an AI assistant do the installation, see [LLM-INSTALL-INSTRUCTIONS.md](../LLM-INSTALL-INSTRUCTIONS.md). After the software in Part 1 is installed, one command does everything else: updating, installing, building, setting up the database and starting the tool.
 
 Run the commands in **PowerShell**. Every part ends with a ✅ check.
 
@@ -33,7 +33,7 @@ Use a short folder such as `C:\vdo`; long Windows paths fail with "Filename too 
 
 ```powershell
 git config --global core.longpaths true
-git clone -b sticky-violation-detection https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool.git C:\vdo
+git clone https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool.git C:\vdo
 ```
 
 ✅ **Check**: `cd C:\vdo` then `git status` shows "working tree clean".
@@ -60,7 +60,7 @@ Or **double-click `Start VDO Tool.cmd`** in `C:\vdo`.
 Then it does the rest on its own. The first run takes a few minutes (downloads packages and the test browser); later starts take seconds:
 
 ```
-▸ Checking for updates        ✓ Up to date (sticky-violation-detection)
+▸ Checking for updates        ✓ Up to date (main)
 ▸ Settings                    ✓ Settings found (server/.env)
 ▸ Installing packages         ✓ … up to date
 ▸ Building                    ✓ … up to date
@@ -70,7 +70,7 @@ Then it does the rest on its own. The first run takes a few minutes (downloads p
 
 The browser opens at **http://127.0.0.1:3000**. Keep the PowerShell window open; **Ctrl+C** stops the tool.
 
-✅ **Check**: the dashboard shows the status boxes green (API, Database, Google Chrome, MP4 video, Deep test engine, Queue), and the footer shows the version, e.g. `Version sticky-violation-detection · 1a2b3c4 · 2026-10-30`.
+✅ **Check**: the dashboard shows the status boxes green (API, Database, Google Chrome, MP4 video, Deep test engine, Queue), and the footer shows the version, e.g. `Version main · 1a2b3c4 · 2026-11-02`.
 
 ## Updating
 
@@ -99,6 +99,7 @@ Updates are only fast-forwards: the tool never merges or overwrites your files. 
 Each run on a live site sends **real** logger events, analytics hits and ad requests. Your uploaded `vdo.ai.js` is swapped in only inside the test browser; the live tag and the vdo.ai server are not changed. Keep the number of URLs and repeats to a minimum, and start with Desktop.
 
 - **Custom placement / CSS check:** upload or paste the code, add the publisher domain, tag and article URLs, optionally turn on the deep test.
+- **Implementation validator:** pick it in step 1, enter one or more tags (comma separated) and the URLs. No code is applied; every test case (TC-01 to TC-13) shows PASS, WARNING, FAIL or Not eligible with its evidence. While it is on the `implementation-validator` branch, start it with `npm run app -- --branch implementation-validator`.
 - **Sticky violation checker:** pick it in step 1. The 13 mandatory checks (ST-01 to ST-13) always run. Tick **Also run the additional checks** for ST-14 to ST-25. Every check shows Pass, Fail or Warning with its screenshot.
 
 ## Troubleshooting

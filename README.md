@@ -503,6 +503,8 @@ Open `http://127.0.0.1:8787`, enter an authorised team token, submit an approved
 
 ### Placement Automation
 
+**Team installation and update procedure:** [INSTALL-AND-UPDATE.md](INSTALL-AND-UPDATE.md). To have an AI assistant install it: [LLM-INSTALL-INSTRUCTIONS.md](LLM-INSTALL-INSTRUCTIONS.md). Release notes: [CHANGELOG.md](CHANGELOG.md).
+
 Everyday use, one command from the repository root (updates from GitHub, asks for the PostgreSQL settings the first time, installs and builds only what changed, starts on http://127.0.0.1:3000):
 
 ```bash
@@ -609,6 +611,7 @@ The authoritative task order and handoff are in [TASKS.md](docs/plan/TASKS.md) a
 ## Documentation map
 
 - [Non-technical product guide](docs/product-guide.md)
+- [Team installation and updates](INSTALL-AND-UPDATE.md), [LLM installation instructions and prompts](LLM-INSTALL-INSTRUCTIONS.md) and [changelog](CHANGELOG.md)
 - [Placement Automation README](custom_placement_automation/README.md), [setup](custom_placement_automation/SETUP.md), [Windows step-by-step install](custom_placement_automation/INSTALL-WINDOWS.md) and [local validation plan](custom_placement_automation/LOCAL-VALIDATION-PLAN.md)
 - [Coolify self-hosting plan](docs/coolify-self-hosting.md)
 - [Dashboard use](docs/dashboard.md)

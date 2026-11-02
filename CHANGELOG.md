@@ -4,6 +4,41 @@ All notable changes to this repository, newest first. The repository holds two a
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Releases are dated by the day they reached `main`, because the project has no version tags yet.
 
+## [Unreleased] Implementation validator (branch `implementation-validator`)
+
+These changes are on the `implementation-validator` branch and are not in `main` yet. Try them with:
+
+```bash
+npm run app -- --branch implementation-validator
+```
+
+### Added
+
+- **Placement Automation: implementation validator (TC-01 to TC-13)** as a fourth check type ([1d3503a](https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool/commit/1d3503a)). It implements *VDO.AI Implementation Validator: Test Cases*: thirteen test cases in three steps (Network, Logger, Elements) for video, banner and offerwall tags.
+  - **Inputs:** one or more tags per check (comma separated); the unit comes from the tag prefix (`v-`, `b-`, `o-`). A 30, 45 or 60 s watch catches slot refresh (TC-03). No code is applied: the live tag is checked.
+  - **Network:** `vdo.ai.js` requests with the cache disabled, like DevTools, with status and initiator, and `logger.php?msg=` error reports. Duplicate embeds that Chrome serves with a single request are caught by also counting the `<script>` elements that load.
+  - **Logger:** payloads posted to `analytics.vdo.ai/logger`, filtered by `tagName` and grouped by `page_url`. The event names `vdo.ai.js` really sends (`player_blocked`, `blocked_ima`, `blocked_agent`) are matched, and the error codes `Q2Fubm90IH` / `bnVsbCBpcy` are read from `eventData`.
+  - **Elements:** the script is present once; the in-content `<tag>-0` wrapper or a floating player is present once; the banner div is present.
+  - **Reporting:** PASS, WARNING or FAIL per test case with its evidence, and a summary line per tag, on the dashboard, in History (with its own filter) and in the PDF. Tests include the reference examples from the test case document and a real-browser test on local video, banner and offerwall pages.
+- **Not eligible** ([22674af](https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool/commit/22674af)). Each tag lists all 13 test cases, and those its unit doesn't run are marked Not eligible with the reason. With several tags, each tag on the page is tested as its own instance. A tag that isn't on a page is *Not eligible on this page* instead of failing, but a page with none of the tags still fails TC-01.
+- **Team installation and update guide**, [INSTALL-AND-UPDATE.md](INSTALL-AND-UPDATE.md). It covers installation on Windows, macOS and Linux, the first start, how updates are applied, test branches, rolling back, shipping an update, troubleshooting and uninstalling.
+- **[LLM-INSTALL-INSTRUCTIONS.md](LLM-INSTALL-INSTRUCTIONS.md)**: instructions and copy-paste prompts for an AI coding assistant to install, update, verify, troubleshoot or uninstall the tool. It covers the requirements, safety rules, a non-interactive settings file, and readiness and smoke-test checks.
+- This changelog ([370d32d](https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool/commit/370d32d)).
+
+### Changed
+
+- **README rewrites** ([653bb54](https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool/commit/653bb54)):
+  - The Placement Automation README describes the four check types, and **how the tool tests every test case**: TC-01 to TC-13 one by one, ST-01 to ST-25 in a table, and the placement/CSS steps.
+  - It also covers settings, the API fields per check type, and tests.
+  - The root README and SETUP.md are brought up to date.
+- **The Windows guide clones `main`** instead of the merged `sticky-violation-detection` branch, and links the team guide.
+
+### Fixed
+
+- Form fields in one row no longer stretch when one has a hint.
+- Re-running a check that applies no code no longer asks for a missing code file.
+- Run headers no longer show scroll settings for the implementation validator.
+
 ## [2026-10-31] Sticky violation checker, one-command start, staging URLs
 
 Merged from `sticky-violation-detection` into `main` ([9e6c388](https://github.com/chetanya1998/VDO.ai-Automated-Player-Testing-APT--Tool/commit/9e6c388)).
